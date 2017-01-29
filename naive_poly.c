@@ -38,10 +38,11 @@ uint8_t eval_poly(uint8_t *poly, uint8_t degree, uint8_t x) {
 
 uint8_t poly_degree(uint8_t *poly, uint8_t max_degree) {
 	uint8_t i;
+    uint8_t degree;
 	for (i=0; i<=max_degree; i++) {
-		if (poly[i] == 0) return (i-1);
+		if (poly[i] != 0) degree = i;
 	}
-	return max_degree;
+	return degree;
 }
 
 uint8_t* interpolate(uint8_t *x, uint8_t *y, uint8_t n) {

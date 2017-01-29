@@ -1,18 +1,27 @@
-all: send receive
+CFLAGS= -Wall -Wextra 
+
+
+all: send receive tests
 
 psmt.o: psmt.c psmt.h
-	gcc -Wall -Wextra -c psmt.c
+	gcc $(CFLAGS) -c psmt.c
 
 send: send.c psmt.o naive_poly.o
-	gcc -Wall -Wextra -c send.c
-	gcc -Wall -Wextra send.o psmt.o naive_poly.o -o send
+	gcc $(CFLAGS) -c send.c
+	gcc $(CFLAGS) send.o psmt.o naive_poly.o -o send
 
 receive: receive.c psmt.o naive_poly.o
-	gcc -Wall -Wextra -c receive.c
-	gcc -Wall -Wextra receive.o psmt.o naive_poly.o -o receive
+	gcc $(CFLAGS) -c receive.c
+	gcc $(CFLAGS) receive.o psmt.o naive_poly.o -o receive
+tests: tests.c debug.o psmt.o naive_poly.o
+	gcc $(CFLAGS) -c tests.c
+	gcc $(CFLAGS) tests.o psmt.o naive_poly.o debug.o -o tests
+
+debug.o: debug.c debug.h
+	gcc $(CFLAGS) -c debug.c
 
 naive_poly.o: naive_poly.c poly.h
-	gcc -Wall -Wextra -c naive_poly.c
+	gcc $(CFLAGS) -c naive_poly.c
 
 clean:
 	rm *.o 
