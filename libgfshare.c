@@ -23,10 +23,11 @@
  *
  */
 
-// #include "config.h"
+//#include "config.h"
 #include "libgfshare.h"
 #include "libgfshare_tables.h"
 
+#include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,7 +92,7 @@ _gfshare_ctx_init_core( const unsigned char *sharenrs,
   }
   
   memcpy( ctx->sharenrs, sharenrs, sharecount );
-  ctx->buffer = XMALLOC( threshold * maxsize );
+  ctx->buffer = XMALLOC( sharecount * maxsize );
   
   if( ctx->buffer == NULL ) {
     int saved_errno = errno;
@@ -129,10 +130,11 @@ gfshare_ctx_init_enc( const unsigned char* sharenrs,
 /* Initialise a gfshare context for recombining shares */
 gfshare_ctx*
 gfshare_ctx_init_dec( const unsigned char* sharenrs,
+                      unsigned int sharecount,
                       unsigned int threshold,
                       unsigned int maxsize )
 {
-  return _gfshare_ctx_init_core( sharenrs, threshold, threshold, maxsize );
+  return _gfshare_ctx_init_core( sharenrs, sharecount, threshold, maxsize );
 }
 
 /* Set the current processing size */
@@ -151,7 +153,7 @@ gfshare_ctx_setsize( gfshare_ctx* ctx, unsigned int size )
 void 
 gfshare_ctx_free( gfshare_ctx* ctx )
 {
-  gfshare_fill_rand( ctx->buffer, ctx->threshold * ctx->maxsize );
+  gfshare_fill_rand( ctx->buffer, ctx->sharecount * ctx->maxsize );
   gfshare_fill_rand( ctx->sharenrs, ctx->sharecount );
   XFREE( ctx->sharenrs );
   XFREE( ctx->buffer );
@@ -166,10 +168,10 @@ void
 gfshare_ctx_enc_setsecret( gfshare_ctx* ctx,
                            const unsigned char* secret)
 {
-  memcpy( ctx->buffer + ((ctx->threshold-1) * ctx->size),
+  memcpy( ctx->buffer + ((ctx->threshold-1) * ctx->maxsize),
           secret,
           ctx->size );
-  gfshare_fill_rand( ctx->buffer, (ctx->threshold-1) * ctx->size );
+  gfshare_fill_rand( ctx->buffer, (ctx->threshold-1) * ctx->maxsize );
 }
 
 /* Extract a share from the context. 
@@ -189,10 +191,11 @@ gfshare_ctx_enc_getshare( const gfshare_ctx* ctx,
   unsigned int ilog = logs[ctx->sharenrs[sharenr]];
   unsigned char *coefficient_ptr = ctx->buffer;
   unsigned char *share_ptr;
-  memcpy(share, ctx->buffer, ctx->size);
-  coefficient_ptr += ctx->size;
+  for( pos = 0; pos < ctx->size; ++pos )
+    share[pos] = *(coefficient_ptr++);
   for( coefficient = 1; coefficient < ctx->threshold; ++coefficient ) {
     share_ptr = share;
+    coefficient_ptr = ctx->buffer + coefficient * ctx->maxsize;
     for( pos = 0; pos < ctx->size; ++pos ) {
       unsigned char share_byte = *share_ptr;
       if( share_byte )
@@ -210,7 +213,7 @@ void
 gfshare_ctx_dec_newshares( gfshare_ctx* ctx,
                            const unsigned char* sharenrs)
 {
-  memcpy( ctx->sharenrs, sharenrs, ctx->threshold );
+  memcpy( ctx->sharenrs, sharenrs, ctx->sharecount );
 }
 
 /* Provide a share context with one of the shares.
@@ -221,11 +224,11 @@ gfshare_ctx_dec_giveshare( gfshare_ctx* ctx,
                            unsigned char sharenr,
                            const unsigned char* share )
 {
-  if( sharenr >= ctx->threshold ) {
+  if( sharenr >= ctx->sharecount ) {
     errno = EINVAL;
     return 1;
   }
-  memcpy( ctx->buffer + (sharenr * ctx->size), share, ctx->size );
+  memcpy( ctx->buffer + (sharenr * ctx->maxsize), share, ctx->size );
   return 0;
 }
 
@@ -236,29 +239,35 @@ void
 gfshare_ctx_dec_extract( const gfshare_ctx* ctx,
                          unsigned char* secretbuf )
 {
-  unsigned int i, j;
+  unsigned int i, j, n, jn;
   unsigned char *secret_ptr, *share_ptr;
-  
+
   memset(secretbuf, 0, ctx->size);
   
-  for( i = 0; i < ctx->threshold; ++i ) {
+  for( n = i = 0; n < ctx->threshold && i < ctx->sharecount; ++n, ++i ) {
     /* Compute L(i) as per Lagrange Interpolation */
     unsigned Li_top = 0, Li_bottom = 0;
     
-    if( ctx->sharenrs[i] == 0 ) continue; /* this share is not provided. */
-    
-    for( j = 0; j < ctx->threshold; ++j ) {
-      if( i == j ) continue;
-      if( ctx->sharenrs[j] == 0 ) continue; /* skip empty share */
-      Li_top += logs[ctx->sharenrs[j]];
-      if( Li_top >= 0xff ) Li_top -= 0xff;
-      Li_bottom += logs[(ctx->sharenrs[i]) ^ (ctx->sharenrs[j])];
-      if( Li_bottom >= 0xff ) Li_bottom -= 0xff;
+    if( ctx->sharenrs[i] == 0 ) {
+      n--;
+      continue; /* this share is not provided. */
     }
-    if( Li_bottom  > Li_top ) Li_top += 0xff;
-    Li_top -= Li_bottom; /* Li_top is now log(L(i)) */
     
-    secret_ptr = secretbuf; share_ptr = ctx->buffer + (ctx->size * i);
+    for( jn = j = 0; jn < ctx->threshold && j < ctx->sharecount; ++jn, ++j ) {
+      if( i == j ) continue;
+      if( ctx->sharenrs[j] == 0 ) {
+        jn--;
+        continue; /* skip empty share */
+      }
+      Li_top += logs[ctx->sharenrs[j]];
+      Li_bottom += logs[(ctx->sharenrs[i]) ^ (ctx->sharenrs[j])];
+    }
+    Li_bottom %= 0xff;
+    Li_top += 0xff - Li_bottom;
+    Li_top %= 0xff;
+    /* Li_top is now log(L(i)) */
+    
+    secret_ptr = secretbuf; share_ptr = ctx->buffer + (ctx->maxsize * i);
     for( j = 0; j < ctx->size; ++j ) {
       if( *share_ptr )
         *secret_ptr ^= exps[Li_top + logs[*share_ptr]];
