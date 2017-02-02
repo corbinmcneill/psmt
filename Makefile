@@ -31,5 +31,6 @@ clean:
 	rm *.o 
 	rm send 
 	rm receive
+	rm tests
 	rm pipes/*
 
