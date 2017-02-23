@@ -1,9 +1,12 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "psmt.h"
-#include "poly.h"
+#include "fieldpoly/fieldpoly.h"
+#include "fieldpoly/ff256.h"
 
 int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
 	//NOTE: Input for this algorithm should be a fifo. This would well 
@@ -11,31 +14,42 @@ int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
 	//approach for network rerouting. Also this should be a while loop.
 
 	/* PHASE 1 */
-	uint8_t pads[N*T];
-	uint8_t *f[N];
-	uint8_t *h[N*T][N];
-
+	ff256_t *pads[N*T+1];
+	poly_t *f[N];
+	poly_t *h[N*T+1][N];
+    ff256_t* reference_element = malloc(sizeof(ff256_t));
+    ff256_t* iter_element = malloc(sizeof(ff256_t));
+    ff256_init(reference_element);
+    ff256_init(iter_element);
+    ff256_t* eval_element;
 	size_t j;
-	int i,k;
 	// This iterates over each pad
-	for (i=0; i<N*T; i++) {
-		f[i] = make_poly(T);
-		pads[i] = f[i][0];
+	for (int i=0; i<N*T+1; i++) {
+        // initialize the polynomial with random values
+		f[i] = rand_poly(T,(element_t*) reference_element);
+        
+		pads[i]->val = ((ff256_t*) f[i]->coeffs[0])->val;
 		// This iterates over each channel
-		for (j=0; j<N; j++) {
-			h[i][j] = make_poly_intercept(T, eval_poly(f[i], T, j));
+
+		for (int j=0; j<N; j++) {
+            iter_element->val = j;
+            // stare at this later to make sure it's ok
+            eval_element  = (ff256_t*) eval_poly(f[i],(element_t*) iter_element);
+			h[i][j] = rand_poly_intercept(T, (element_t*) eval_element);
+            free(eval_element);
 		}
 		//each channel
-		for (j=0; j<N; j++) {
-			int k;
-			for (k=0; k<T+1; k++) {
+		for (int j=0; j<N; j++) {
+			for (int k=0; k<T+1; k++) {
 				char *h_element = sstring("%u",h[i][j][k]);
-				write(fds[j], h_element, strnlen(h_element, STRING_LEN));
+				write(fds[j], h_element, strnlen(h_element, SEC_LEN));
 			}
-
-			for (k=0; k<N; k++) {
-				char *c_item = sstring("%u",eval_poly(h[i][j],T,k));
-				write(fds[j], h_element, strnlen(h_element, STRING_LEN));
+			for (int k=0; k<N; k++) {
+                iter_element->val = k;
+                eval_element = eval_poly(h[i][j],iter_element);
+				char *c_item = sstring("%u",eval_element);
+				write(fds[j], h_element, strnlen(h_element, SEC_LEN));
+                free(eval_element);
 			}
 		}
 	}
@@ -60,6 +74,13 @@ int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
 	} else {
 		printf("conflict_response byte is not valid");
 	}
+
+    // free stuff
+    free(iter_element);
+    free(reference_element);
+	for (int i=0; i<N*T+1; i++) {
+        poly_free(f[i]);
+    }
 	return 0;
 }
 
@@ -73,8 +94,8 @@ int receive_info(int *fds, size_t fds_n) {
 	size_t j;
 
 	//indexed by pad, then channel 
-	uint8_t h[N*T+1][N][T+1]; //T+1 coefficients of polynomial
-	uint8_t c[N*T+1][N][N];   //N checking pieces
+	poly_t* h[N*T+1][N]; //T+1 coefficients of polynomial
+	ff256_t* c[N*T+1][N][N];   //N checking pieces
 
 	/* Phase 1 */
 	char read_element[SEC_LEN];
@@ -91,13 +112,13 @@ int receive_info(int *fds, size_t fds_n) {
 			for (k=0; k<T+1; k++) {
 				memset(read_element, 0, SEC_LEN);
 				ssize_t n = read(j, read_element, SEC_LEN); 
-				h[i][j][k] = strtol(read_element, NULL, 10);
+				h[i][j]->coeffs[k].val = strtol(read_element, NULL, 10);
 			}
 			//read checking pieces
 			for (k=0; k<N; k++) {
 				memset(read_element, 0, SEC_LEN);
 				ssize_t n = read(j, read_element, SEC_LEN); 
-				c[i][j][k] = strtol(read_element, NULL, 10);
+				c[i][j][k].val = strtol(read_element, NULL, 10);
 			}
 		}
 	}
