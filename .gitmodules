@@ -1,0 +1,3 @@
+[submodule "fieldpoly"]
+	path = fieldpoly
+	url = http://github.com/corbinmcneill/fieldpoly
