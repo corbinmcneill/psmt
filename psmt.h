@@ -4,9 +4,8 @@
 #include <stddef.h>
 
 #define N 5
-#define T ((N-1)/2)
-#define SEC_LEN 50
-
+#define T 2
+#define SEC_LEN 100
 
 int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n);
 
