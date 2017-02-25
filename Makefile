@@ -1,4 +1,4 @@
-CFLAGS= -ggdb -Wall -Wextra -std=c99
+CFLAGS= -ggdb -Wall -Wextra -std=gnu11
 
 
 all: send receive tests fieldpoly
