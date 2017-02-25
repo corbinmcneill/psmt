@@ -1,8 +1,8 @@
+#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stddef.h>
-#include <string.h>
 
 #include "psmt.h"
 #include "fieldpoly/fieldpoly.h"
@@ -40,15 +40,21 @@ int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
 		}
 		//each channel
 		for (int j=0; j<N; j++) {
+			char h_element[SEC_LEN];
 			for (int k=0; k<T+1; k++) {
-				char *h_element = sstring("%u",h[i][j][k]);
+				if (snprintf(h_element,SEC_LEN,"%u",((ff256_t*)h[i][j]->coeffs[k])->val)<=0) {
+					printf("parsing error, h_element");
+				}
 				write(fds[j], h_element, strnlen(h_element, SEC_LEN));
 			}
+			char c_item[SEC_LEN];
 			for (int k=0; k<N; k++) {
                 iter_element->val = k;
-                eval_element = eval_poly(h[i][j],iter_element);
-				char *c_item = sstring("%u",eval_element);
-				write(fds[j], h_element, strnlen(h_element, SEC_LEN));
+                eval_element = (ff256_t*)eval_poly(h[i][j],iter_element);
+				if (snprintf(c_item,SEC_LEN,"%u",eval_element->val)<=0) {
+					printf("parsing error, c_item");
+				}
+				write(fds[j], c_item, strnlen(c_item, SEC_LEN));
                 free(eval_element);
 			}
 		}
