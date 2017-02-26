@@ -28,7 +28,8 @@ int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
         // initialize the polynomial with random values
 		f[i] = rand_poly(T,(element_t*) reference_element);
         
-		pads[i]->val = ((ff256_t*) f[i]->coeffs[0])->val;
+		pads[i] = malloc(sizeof(ff256_t)); //NOTE: free this
+		assign((element_t*)pads[i],f[i]->coeffs[0]);
 		// This iterates over each channel
 
 		for (int j=0; j<N; j++) {
@@ -50,7 +51,7 @@ int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
 			char c_item[SEC_LEN];
 			for (int k=0; k<N; k++) {
                 iter_element->val = k;
-                eval_element = (ff256_t*)eval_poly(h[i][j],iter_element);
+                eval_element = (ff256_t*)eval_poly(h[i][j],(element_t*)iter_element);
 				if (snprintf(c_item,SEC_LEN,"%u",eval_element->val)<=0) {
 					printf("parsing error, c_item");
 				}
@@ -60,19 +61,19 @@ int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
 		}
 	}
 	/* PHASE 2 */
-	conflict_response = [N][2][SEC_LEN];
-	for (j=N-1; j>=0; j++) {
+	char conflict_response[N][SEC_LEN];
+	for (j=0; j<N; j++) {
 		if (read(0, conflict_response[j], SEC_LEN) <0) {
 			printf("conflict_response read failure\n");
-			fflush();
+			fflush(stdout);
 		}
 	}
 
 	/* PHASE 3 */
-	char *write_element;
+	char write_element[SEC_LEN];
 	if (conflict_response[0][0] == 'S') {
 		for (j=0; j<N; j++) {
-			write_element = sstring("%u",secret[0] ^ pads[conflict_response[0][1]]);
+			snprintf(write_element, SEC_LEN, "%c",secret[0] ^ pads[(int)conflict_response[0][1]]->val);
 			write(fds[j], write_element, strnlen(write_element, SEC_LEN));
 		}
 	} else if (conflict_response[0][0] == 'F') {
@@ -118,13 +119,13 @@ int receive_info(int *fds, size_t fds_n) {
 			for (k=0; k<T+1; k++) {
 				memset(read_element, 0, SEC_LEN);
 				ssize_t n = read(j, read_element, SEC_LEN); 
-				h[i][j]->coeffs[k].val = strtol(read_element, NULL, 10);
+				((ff256_t*) h[i][j]->coeffs[k])->val = strtol(read_element, NULL, 10);
 			}
 			//read checking pieces
 			for (k=0; k<N; k++) {
 				memset(read_element, 0, SEC_LEN);
 				ssize_t n = read(j, read_element, SEC_LEN); 
-				c[i][j][k].val = strtol(read_element, NULL, 10);
+				((ff256_t*) c[i][j][k])->val = strtol(read_element, NULL, 10);
 			}
 		}
 	}
@@ -136,10 +137,11 @@ int receive_info(int *fds, size_t fds_n) {
 	unsigned int best_pad_failed=0;
 	
 	if (best_pad_failed) {
+		printf("best_pad failed");
 		//send lots of error correction info publically
 	} else {
 		for (j=0; j<N; j++) {
-			write_element = sstring("S%u",best_pad);
+			snprintf(write_element, SEC_LEN,"S%u",best_pad);
 			write(fds[j], write_element, strnlen(write_element, SEC_LEN));
 		}
 	}
@@ -150,10 +152,10 @@ int receive_info(int *fds, size_t fds_n) {
 	//NOTE: we need to read all of the channels or else we'll corrupt our
 	//subsequent messages. 
 	char ciphertext[SEC_LEN];
-	for (j=N-1; j>=0; j++) {
-		if (read(0, ciphertext, SEC_LEN) <0) {
+	for (j=0; j<=N; j++) {
+		if (read(j, ciphertext, SEC_LEN) <0) {
 			printf("ciphertext read failure\n");
-			fflush();
+			fflush(stdout);
 		}
 	}
 
