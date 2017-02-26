@@ -18,21 +18,24 @@ int main() {
 		snprintf(filename,FNAME_LEN,"pipes/pipe_%d",i);
 		if (!mkfifo(filename, 0777)){
 			if (errno == EEXIST) {
-				/*fail silently */
-				/*printf("send.c: pipe exists"); */
+				printf("send.c: pipe exists");
+				fflush(stdout);
 			}
 			else {
-				printf("send.c: mkfifo fail %s", strerror(errno));
+				printf("send.c: mkfifo fail %s: %s\n", filename, strerror(errno));
+				fflush(stdout);
 				exit(-1);
 			}
 		}
 		if ((fds[i] = open(filename,O_RDWR)) < 0) {
 			printf("send.c: open fail");
+			fflush(stdout);
 			exit(-1);
 		}
 	}
 
 	char *message = "test message\n"; 
+	printf("calling send_info\n");
 	send_info(message, strlen(message), fds, N);
 	return 0;
 }
