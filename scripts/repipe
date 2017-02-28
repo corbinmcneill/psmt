@@ -1,0 +1,8 @@
+#!/bin/bash
+rm -f pipes/*
+for i in {0..4}
+do
+	mkfifo "pipes/pipe_s_$i"
+	mkfifo "pipes/pipe_r_$i"
+done
+
