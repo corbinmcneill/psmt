@@ -20,8 +20,7 @@ debug.o: debug.c debug.h
 	gcc $(CFLAGS) -c debug.c
 
 clean:
-	rm *.o 
-	rm send 
-	rm receive
-	rm tests
-	rm pipes/*
+	rm -f *.o 
+	rm -f send 
+	rm -f receive
+	rm -f pipes/*
