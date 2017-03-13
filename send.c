@@ -10,32 +10,24 @@
 #define FNAME_LEN 50
 
 int main() {
-	int fds[N];
 	int i;
-
+	int rfds[N], wfds[N];
 	for (i=0; i<N; i++) {
-		char filename[FNAME_LEN];
-		snprintf(filename,FNAME_LEN,"pipes/pipe_%d",i);
-		if (!mkfifo(filename, 0777)){
-			if (errno == EEXIST) {
-				printf("send.c: pipe exists");
-				fflush(stdout);
-			}
-			else {
-				printf("send.c: mkfifo fail %s: %s\n", filename, strerror(errno));
-				fflush(stdout);
-				exit(-1);
-			}
+		char rfilename[FNAME_LEN], wfilename[FNAME_LEN];;
+		snprintf(rfilename,FNAME_LEN,"pipes/pipe_a_%d",i);
+		snprintf(wfilename,FNAME_LEN,"pipes/pipe_b_%d",i);
+		if ((rfds[i] = open(rfilename,O_RDONLY)) < 0) {
+			printf("receive.c: read open fail");
+			exit(-1);
 		}
-		if ((fds[i] = open(filename,O_RDWR)) < 0) {
-			printf("send.c: open fail");
-			fflush(stdout);
+		if ((wfds[i] = open(wfilename,O_WRONLY)) < 0) {
+			printf("receive.c: write open fail");
 			exit(-1);
 		}
 	}
 
 	char *message = "test message\n"; 
 	printf("calling send_info\n");
-	send_info(message, strlen(message), fds, N);
+	send_info(message, strlen(message), rfds, wfds, N);
 	return 0;
 }

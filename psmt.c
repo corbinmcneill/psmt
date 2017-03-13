@@ -3,12 +3,13 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stddef.h>
+#include <errno.h>
 
 #include "psmt.h"
 #include "fieldpoly/fieldpoly.h"
 #include "fieldpoly/ff256.h"
 
-int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
+int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n) {
 	//NOTE: Input for this algorithm should be a fifo. This would well 
 	//emulate input from a socket which would allow for long-term transparent
 	//approach for network rerouting. Also this should be a while loop.
@@ -40,41 +41,46 @@ int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
             free(eval_element);
 		}
 		//each channel
+		ssize_t n;
 		for (int j=0; j<N; j++) {
-			char h_element[SEC_LEN];
-			for (int k=0; k<T+1; k++) {
-				if (snprintf(h_element,SEC_LEN,"%u",((ff256_t*)h[i][j]->coeffs[k])->val)<=0) {
-					printf("parsing error, h_element");
+			uint8_t h_element;
+			for (int k=0; k<T+1; k++) { //TODO: remove string from read/write in all communations
+				h_element = ((ff256_t*)h[i][j]->coeffs[k])->val;
+				if (write(wfds[j], &h_element, 1) < 0) {
+					printf("psmt.c coef write error: %s", strerror(errno));
 				}
-				write(fds[j], h_element, strnlen(h_element, SEC_LEN));
+				//printf("write: pad %d, channel %d, coef %d\n", i, j, k);
 			}
-			char c_item[SEC_LEN];
-			for (int k=0; k<N; k++) {
+			for (int k=1; k<N+1; k++) {
                 iter_element->val = k;
                 eval_element = (ff256_t*)eval_poly(h[i][j],(element_t*)iter_element);
-				if (snprintf(c_item,SEC_LEN,"%u",eval_element->val)<=0) {
-					printf("parsing error, c_item");
+				if (write(wfds[j], &eval_element, 1)< 0) {
+					printf("psmt.c check write error: %s", strerror(errno));
 				}
-				write(fds[j], c_item, strnlen(c_item, SEC_LEN));
+				//printf("write: pad %d, channel %d, check %d\n", i, j, k);
                 free(eval_element);
 			}
 		}
 	}
+
 	/* PHASE 2 */
-	char conflict_response[N][SEC_LEN];
+	
+	//read conflict responses. currently this assumes success on all wires
+	char conflict_response[N][2];
 	for (j=0; j<N; j++) {
-		if (read(0, conflict_response[j], SEC_LEN) <0) {
+		if (read(rfds[j], &conflict_response[j][0], 1) <0) {
 			printf("conflict_response read failure\n");
-			fflush(stdout);
+		}
+		if (read(rfds[j], &conflict_response[j][1], 1) <0) {
+			printf("conflict_response read failure\n");
 		}
 	}
 
 	/* PHASE 3 */
-	char write_element[SEC_LEN];
 	if (conflict_response[0][0] == 'S') {
 		for (j=0; j<N; j++) {
-			snprintf(write_element, SEC_LEN, "%c",secret[0] ^ pads[(int)conflict_response[0][1]]->val);
-			write(fds[j], write_element, strnlen(write_element, SEC_LEN));
+			char towrite = (char)(((uint8_t)secret[0])^pads[(int)conflict_response[0][1]]->val);
+			write(wfds[j], &towrite, 1);
 		}
 	} else if (conflict_response[0][0] == 'F') {
 		//we ignore this *important* case for now
@@ -91,7 +97,7 @@ int send_info(char *secret, size_t secret_n, int *fds, size_t fds_n) {
 	return 0;
 }
 
-int receive_info(int *fds, size_t fds_n) {
+int receive_info(int *rfds, int *wfds, size_t fds_n) {
 	//NOTE: this entire algorithm needs to run on a while loop to keep
 	//reading input. Shouldn't this have a fifo as output. That would 
 	//well emulate outputting everything to a socket for a more
@@ -101,31 +107,45 @@ int receive_info(int *fds, size_t fds_n) {
 	size_t j;
 
 	//indexed by pad, then channel 
-	poly_t* h[N*T+1][N]; //T+1 coefficients of polynomial
-	ff256_t* c[N*T+1][N][N];   //N checking pieces
+	poly_t* h[N*T+1][N];    //T+1 coefficients of polynomial
+	ff256_t c[N*T+1][N][N]; //N checking pieces
+
+	ff256_t blankItem;
+	ff256_init(&blankItem);
 
 	/* Phase 1 */
-	char read_element[SEC_LEN];
-	char write_element[SEC_LEN];
+	char read_element;
+	char write_element;
 	//cycle through the pads
 	for (i=0; i<N*T+1; i++) {
 		//read all the transmitted information from each channel
+		
 		
 		//NOTE: this currently assumes that all information is 
 		//delivered perfectly. This assumption can and will be 
 		//relaxed later.
 		for (j=0; j<N; j++) {
+			//initialize each 
+			h[i][j] = poly_init(T, (element_t*) &blankItem);
+			
 			//read coefficients
 			for (k=0; k<T+1; k++) {
-				memset(read_element, 0, SEC_LEN);
-				ssize_t n = read(j, read_element, SEC_LEN); 
-				((ff256_t*) h[i][j]->coeffs[k])->val = strtol(read_element, NULL, 10);
+				if (read(rfds[j], &read_element, 1) < 0) {
+					printf("psmt.c coef read error: %s", strerror(errno));
+				}
+				//printf("read:  pad %d, channel %d, coef %d\n", i, (int)j, k);
+				((ff256_t*) h[i][j]->coeffs[k])->val = (uint8_t) read_element;
 			}
 			//read checking pieces
 			for (k=0; k<N; k++) {
-				memset(read_element, 0, SEC_LEN);
-				ssize_t n = read(j, read_element, SEC_LEN); 
-				((ff256_t*) c[i][j][k])->val = strtol(read_element, NULL, 10);
+				//initialize each element in c
+				ff256_init(&c[i][j][k]);
+				
+				if ( read(rfds[j], &read_element, 1) < 0) {
+					printf("psmt.c check read error: %s", strerror(errno));
+				}
+				//printf("read:  pad %d, channel %d, check %d\n", i, (int)j, k);
+				c[i][j][k].val = (uint8_t) read_element;
 			}
 		}
 	}
@@ -141,8 +161,12 @@ int receive_info(int *fds, size_t fds_n) {
 		//send lots of error correction info publically
 	} else {
 		for (j=0; j<N; j++) {
-			snprintf(write_element, SEC_LEN,"S%u",best_pad);
-			write(fds[j], write_element, strnlen(write_element, SEC_LEN));
+			if (write(wfds[j], "S", 1) < 0) {
+				printf("send failed");
+			}
+			if (write(wfds[j], &write_element, 1) < 0) {
+				printf("send failed");
+			}
 		}
 	}
 
@@ -151,11 +175,11 @@ int receive_info(int *fds, size_t fds_n) {
 	//all channels
 	//NOTE: we need to read all of the channels or else we'll corrupt our
 	//subsequent messages. 
-	char ciphertext[SEC_LEN];
-	for (j=0; j<=N; j++) {
-		if (read(j, ciphertext, SEC_LEN) <0) {
-			printf("ciphertext read failure\n");
-			fflush(stdout);
+	char ciphertext;
+	for (j=0; j<N; j++) {
+		if (read(rfds[j], &ciphertext, 1) < 0) {
+			printf("ciphertext read failure: %s\n", strerror(errno));
+			exit(1);
 		}
 	}
 
@@ -166,11 +190,28 @@ int receive_info(int *fds, size_t fds_n) {
 	} else {
 		//do polynomial interpolation here to get the y-int of the 
 		//f polynomial
-		onetimepad = 0;
+		ff256_t zero;
+		ff256_init(&zero);
+		ff256_add_id((element_t*)&zero);
+
+		ff256_t *X[N];
+		ff256_t *Y[N];
+		
+		ff256_t y;
+		for (int i=0; i<N; i++) {
+			X[i] = malloc(sizeof(ff256_t));
+			ff256_init(X[i]);
+			ff256_set(i+1, X[i]);
+			Y[i] = (ff256_t*)h[best_pad][i]->coeffs[0];
+		}
+		poly_t *f = interpolate((element_t**)X, (element_t**)Y, N);
+		//one time pad is always set to 0
+		onetimepad = ((ff256_t*)eval_poly(f,(element_t*)&zero))->val;
+		poly_free(f);
 	}
 	//At this point we have a padded message and a pad. Just recreate 
 	//the message
-	char plaintext = ciphertext[0] ^ onetimepad;
+	char plaintext = ciphertext ^ onetimepad;
 	printf("%c", plaintext);
 
 	return 0;
