@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -8,6 +9,14 @@
 #include "psmt.h"
 #include "fieldpoly/fieldpoly.h"
 #include "fieldpoly/ff256.h"
+
+void validateF(poly_t **f, size_t n) {
+	for (size_t i=0; i<n; i++) {
+		for (int j=0; j<(f[i]->degree+1); j++) {
+			assert(f[i]->coeffs[j]->size == sizeof(ff256_t));
+		}
+	}
+}
 
 int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n) {
 	//NOTE: Input for this algorithm should be a fifo. This would well 
@@ -28,13 +37,14 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 	for (int i=0; i<N*T+1; i++) {
         // initialize the polynomial with random values
 		f[i] = rand_poly(T,(element_t*) reference_element);
+		validateF(f, i+1);
         
 		pads[i] = malloc(sizeof(ff256_t)); //NOTE: free this
 		assign((element_t*)pads[i],f[i]->coeffs[0]);
 		// This iterates over each channel
 
 		for (int j=0; j<N; j++) {
-            iter_element->val = j;
+            iter_element->val = j+1;
             // stare at this later to make sure it's ok
             eval_element  = (ff256_t*) eval_poly(f[i],(element_t*) iter_element);
 			h[i][j] = rand_poly_intercept(T, (element_t*) eval_element);
@@ -64,6 +74,7 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 	}
 
 	/* PHASE 2 */
+	validateF(f, N);
 	
 	//read conflict responses. currently this assumes success on all wires
 	char conflict_response[N][2];
@@ -77,6 +88,7 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 	}
 
 	/* PHASE 3 */
+	validateF(f, N);
 	if (conflict_response[0][0] == 'S') {
 		for (j=0; j<N; j++) {
 			char towrite = (char)(((uint8_t)secret[0])^pads[(int)conflict_response[0][1]]->val);
@@ -87,6 +99,7 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 	} else {
 		printf("conflict_response byte is not valid");
 	}
+	validateF(f, N);
 
     // free stuff
     free(iter_element);
@@ -206,7 +219,7 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 		}
 		poly_t *f = interpolate((element_t**)X, (element_t**)Y, N);
 		//one time pad is always set to 0
-		onetimepad = ((ff256_t*)eval_poly(f,(element_t*)&zero))->val;
+		onetimepad = ((ff256_t*)f->coeffs[0])->val;
 		poly_free(f);
 	}
 	//At this point we have a padded message and a pad. Just recreate 
@@ -216,3 +229,4 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 
 	return 0;
 }
+
