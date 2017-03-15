@@ -25,7 +25,7 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 
 	/* PHASE 1 */
 	ff256_t *pads[N*T+1];
-	poly_t *f[N];
+	poly_t *f[N*T+1];
 	poly_t *h[N*T+1][N];
     ff256_t* reference_element = malloc(sizeof(ff256_t));
     ff256_t* iter_element = malloc(sizeof(ff256_t));
@@ -37,7 +37,7 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 	for (int i=0; i<N*T+1; i++) {
         // initialize the polynomial with random values
 		f[i] = rand_poly(T,(element_t*) reference_element);
-		validateF(f, i+1);
+//validateF(f, i+1);
         
 		pads[i] = malloc(sizeof(ff256_t)); //NOTE: free this
 		assign((element_t*)pads[i],f[i]->coeffs[0]);
@@ -188,15 +188,17 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 	//all channels
 	//NOTE: we need to read all of the channels or else we'll corrupt our
 	//subsequent messages. 
-	char ciphertext;
+	char cipherchar;
 	for (j=0; j<N; j++) {
-		if (read(rfds[j], &ciphertext, 1) < 0) {
+		if (read(rfds[j], &cipherchar, 1) < 0) {
 			printf("ciphertext read failure: %s\n", strerror(errno));
 			exit(1);
 		}
 	}
+	uint8_t ciphertext = (uint8_t) cipherchar;
 
-	char onetimepad;
+	uint8_t onetimepad;
+	poly_t *f;
 	if (best_pad_failed) {
 		//collect and interperet fault info that was sent back
 		//we'll skip this for now
@@ -217,15 +219,15 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 			ff256_set(i+1, X[i]);
 			Y[i] = (ff256_t*)h[best_pad][i]->coeffs[0];
 		}
-		poly_t *f = interpolate((element_t**)X, (element_t**)Y, N);
+		f = interpolate((element_t**)X, (element_t**)Y, N);
 		//one time pad is always set to 0
 		onetimepad = ((ff256_t*)f->coeffs[0])->val;
-		poly_free(f);
 	}
 	//At this point we have a padded message and a pad. Just recreate 
 	//the message
 	char plaintext = ciphertext ^ onetimepad;
 	printf("%c", plaintext);
+	poly_free(f);
 
 	return 0;
 }
