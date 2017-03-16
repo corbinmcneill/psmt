@@ -168,6 +168,9 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 	//identify conflicts, and pick the best pad here.
 	unsigned int best_pad = 0;
 	unsigned int best_pad_failed=0;
+
+	//NOTE: work in progress
+	best_pad = find_best_pad(c,h);
 	
 	if (best_pad_failed) {
 		printf("best_pad failed");
@@ -232,3 +235,28 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 	return 0;
 }
 
+/* find the pad whose wire conflicts are subset of the wire conflicts
+ * on all the other pads. Such a pad is guaranteed to exist by a 
+ * pidgeon hole argument. See PSMT p.41 */
+/* NOTE: this may require optimization*/
+int find_best_pad(poly_t *c[][][],ff256_t *h[][]) {
+	for (int i=0; i<N*T+1; i++) {
+		
+	}
+}
+
+int find_pad_conflicts(int pad, poly_t *c[][][],ff256_t *h[][]) {
+	assert(N*N <= sizeof int)
+	int toReturn = 0;
+	for (int i=0; i<N; i++) {
+		for (int j=i+1; j<N; j++) {
+			ff256_t x,*y;
+			x.val = i;
+			y = poly_eval(h[pad][j], x);
+			if (c[pad][i][j].val != y->val) {
+				toReturn |= 1<<((i*N)+j);
+			}
+		}
+	}
+	return toReturn;
+}
