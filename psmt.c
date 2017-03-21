@@ -24,43 +24,61 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 	//approach for network rerouting. Also this should be a while loop.
 
 	/* PHASE 1 */
-	ff256_t *pads[N*T+1];
-	poly_t *f[N*T+1];
-	poly_t *h[N*T+1][N];
-    ff256_t* reference_element = malloc(sizeof(ff256_t));
-    ff256_t* iter_element = malloc(sizeof(ff256_t));
-    ff256_init(reference_element);
-    ff256_init(iter_element);
+
+    /* ff256 evaluation of a polynomial */
     ff256_t* eval_element;
-	size_t j;
-	// This iterates over each pad
+
+    /* an blank example of an initialized ff256 element for the fieldpoly 
+     * library */
+    ff256_t* reference_element = malloc(sizeof(ff256_t));
+    ff256_init(reference_element);
+
+    /* element used for evaluation of h's to generate checking pieces */
+    ff256_t* iter_element = malloc(sizeof(ff256_t));
+    ff256_init(iter_element);
+
+	/*the pads generated for a single psmt iteration */
+	ff256_t *pads[N*T+1];
+	/*the polynomials with y-intercepts corresponding to the pads */
+	poly_t *f[N*T+1];
+
+	/*for each wire, the N*T+1 h polynomials and the associated checking
+	 * pieces to be sent for each pad */
+	trans_contents data[N];
+	/* the uint8_t representation of data. This is precicely the contents
+	 * of the packet send on each wire */
+	trans_packet data_pack[N];
+
+	/* This iterates over each pad */
 	for (int i=0; i<N*T+1; i++) {
-        // initialize the polynomial with random values
-		f[i] = rand_poly(T,(element_t*) reference_element);
-//validateF(f, i+1);
+        /* initialize the polynomial with random values */
+		f[i] = rand_poly(T, (element_t*)reference_element);
         
+		/* initialize and populate the pads array */
 		pads[i] = malloc(sizeof(ff256_t)); //NOTE: free this
 		assign((element_t*)pads[i],f[i]->coeffs[0]);
-		// This iterates over each channel
 
+		/* Iterate over each channel. For each channel, use the evaluation 
+		 * of f at a unique point to designate the y-intercept of that h poly.*/
 		for (int j=0; j<N; j++) {
+            /* pick x */
             iter_element->val = j+1;
-            // stare at this later to make sure it's ok
-            eval_element  = (ff256_t*) eval_poly(f[i],(element_t*) iter_element);
-			h[i][j] = rand_poly_intercept(T, (element_t*) eval_element);
+            /* calculate y */
+            eval_element = (ff256_t*) eval_poly(f[i],(element_t*) iter_element);
+			data[j].h[i] = rand_poly_intercept(T, (element_t*) eval_element);
+
             free(eval_element);
 		}
-		//each channel
 		ssize_t n;
+		/* Iterate over each channel. For each channel, generate the checking
+		 * pieces to be sent with the h's.*/
 		for (int j=0; j<N; j++) {
 			uint8_t h_element;
-			for (int k=0; k<T+1; k++) { //TODO: remove string from read/write in all communations
-				h_element = ((ff256_t*)h[i][j]->coeffs[k])->val;
-				if (write(wfds[j], &h_element, 1) < 0) {
-					printf("psmt.c coef write error: %s", strerror(errno));
-				}
-				//printf("write: pad %d, channel %d, coef %d\n", i, j, k);
+			/* iterate over the coefficients of each h poly */
+			for (int k=0; k<T+1; k++) { 
+				data_pack[j].h_vals[i][k] = ((ff256_t*)data[j].h[i]->coeffs[k])->val;
 			}
+			/* iterate over 
 			for (int k=1; k<N+1; k++) {
                 iter_element->val = k;
                 eval_element = (ff256_t*)eval_poly(h[i][j],(element_t*)iter_element);
@@ -164,15 +182,13 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 	}
 
 	/* Phase 2 */
-	//NOTE: In the future we will remove inconcistencies, 
-	//identify conflicts, and pick the best pad here.
-	unsigned int best_pad = 0;
-	unsigned int best_pad_failed=0;
-
-	//NOTE: work in progress
-	best_pad = find_best_pad(c,h);
+	unsigned int best_pad = find_best_pad(c,h);
+	unsigned int best_pad_failed = !!find_pad_conflicts(best_pad, c, h);
 	
 	if (best_pad_failed) {
+		for (int i=0; i<N*T+1; i++) {
+
+		
 		printf("best_pad failed");
 		//send lots of error correction info publically
 	} else {
@@ -217,7 +233,7 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 		
 		ff256_t y;
 		for (int i=0; i<N; i++) {
-			X[i] = malloc(sizeof(ff256_t));
+		X[i] = malloc(sizeof(ff256_t));
 			ff256_init(X[i]);
 			ff256_set(i+1, X[i]);
 			Y[i] = (ff256_t*)h[best_pad][i]->coeffs[0];
@@ -240,11 +256,28 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
  * pidgeon hole argument. See PSMT p.41 */
 /* NOTE: this may require optimization*/
 int find_best_pad(poly_t *c[][][],ff256_t *h[][]) {
+	int conflicts[N*T+1];
 	for (int i=0; i<N*T+1; i++) {
-		
+		conflict[i] = find_pad_conflicts(i, c, h);	
+	}
+	for (int i=0; i<N*T+1; i++) {
+		int otherUnion = 0;
+		for (int j=0; j<N*T+1; j++) {
+			if (i!=j) {
+				otherUnion |= conflicts[j];
+			}
+		}
+		if (otherUnion & conflict[i] == conflict[i]) {
+			return i;
+		}
 	}
 }
 
+/* Find the wire-by-wire conflicts known by a single pad, labeled
+ * pad. 
+ * A set of conflicts are returned in the following manner:
+ * A conflict exists on wires n and m where n < m iff
+ * result & (n*N + m) > 0 */
 int find_pad_conflicts(int pad, poly_t *c[][][],ff256_t *h[][]) {
 	assert(N*N <= sizeof int)
 	int toReturn = 0;
@@ -260,3 +293,25 @@ int find_pad_conflicts(int pad, poly_t *c[][][],ff256_t *h[][]) {
 	}
 	return toReturn;
 }
+
+int pack2cont(trans_packet given, trans_contents result) {
+	ff256_t ref = ff256_init();
+	for (int i=0; i<N*T+1; i++) {
+		result.h[i] = poly_init(T+1, &ref);
+		for (int j=0; j<T+1; j++) 
+			result.h[i]->coeffs[j] = given.h_vals[i][j];
+		for (int j=0; j<N; j++) {
+			ff256_t c_ff256 = ff256_init();
+			c_ff256.val = given.c_vals[i][j];
+			result.c[i][j] = c_ff256;
+		}
+	}
+	return 0;
+}
+
+int cont2pack(trans_contents given, trans_packet result) {
+	for (int i=0; i<N*T+1; i++) {
+		for (int j=0; j<T+1; j++)
+			result.h[i][j] = given.h_vals[
+
+	b.
