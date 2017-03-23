@@ -78,7 +78,7 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 			for (int k=0; k<T+1; k++) { 
 				data_pack[j].h_vals[i][k] = ((ff256_t*)data[j].h[i]->coeffs[k])->val;
 			}
-			/* iterate over 
+			/* evaluate h at N+1 places */
 			for (int k=1; k<N+1; k++) {
                 iter_element->val = k;
                 eval_element = (ff256_t*)eval_poly(h[i][j],(element_t*)iter_element);
