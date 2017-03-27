@@ -76,130 +76,79 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 			uint8_t h_element;
 			/* iterate over the coefficients of each h poly */
 			for (int k=0; k<T+1; k++) { 
-				data_pack[j].h_vals[i][k] = ((ff256_t*)data[j].h[i]->coeffs[k])->val;
+				data_pack[j].h_vals[i][k] = 
+					((ff256_t*)data[j].h[i]->coeffs[k])->val;
 			}
 			/* evaluate h at N+1 places */
 			for (int k=1; k<N+1; k++) {
                 iter_element->val = k;
-                eval_element = (ff256_t*)eval_poly(h[i][j],(element_t*)iter_element);
-				if (write(wfds[j], &eval_element, 1)< 0) {
-					printf("psmt.c check write error: %s", strerror(errno));
-				}
-				//printf("write: pad %d, channel %d, check %d\n", i, j, k);
-                free(eval_element);
+                data_pack[j].c_vals[i][k] = 
+                	(ff256_t*)eval_poly(h[i][j], (element_t*)iter_element);
 			}
+		}
+	}
+	for (int i=0; i<N; i++) {
+		data_pack[i].round_num = 1;
+	}
+
+	/* send the data_pack's we created */
+	for (int i=0; i<N; i++) {
+		if (write(wfds[i], data_pack[i], sizeof data_pack) < 0) {
+			printf("phase 1 write error: %s\n", strerror(errno));
 		}
 	}
 
 	/* PHASE 2 */
-	validateF(f, N);
 	
-	//read conflict responses. currently this assumes success on all wires
-	char conflict_response[N][2];
-	for (j=0; j<N; j++) {
-		if (read(rfds[j], &conflict_response[j][0], 1) <0) {
-			printf("conflict_response read failure\n");
-		}
-		if (read(rfds[j], &conflict_response[j][1], 1) <0) {
-			printf("conflict_response read failure\n");
-		}
-	}
+	/* TODO: perform public read and determine whether a pad was successfully read.*/
+	int good_read = 1
 
 	/* PHASE 3 */
-	validateF(f, N);
-	if (conflict_response[0][0] == 'S') {
-		for (j=0; j<N; j++) {
-			char towrite = (char)(((uint8_t)secret[0])^pads[(int)conflict_response[0][1]]->val);
-			write(wfds[j], &towrite, 1);
-		}
-	} else if (conflict_response[0][0] == 'F') {
-		//we ignore this *important* case for now
+	if (good_read) {
+		/*TODO public write xor'd secret */
 	} else {
-		printf("conflict_response byte is not valid");
-	}
-	validateF(f, N);
+		/*TODO public read error correction information. This should probably
+		 * be a separate function */
+	} 
 
-    // free stuff
+    /* free stuff */
     free(iter_element);
     free(reference_element);
-	for (int i=0; i<N*T+1; i++) {
-        poly_free(f[i]);
+	for (int i=0; i<N; i++) {
+		cont_free(phase1cont[i]);
     }
-	return 0;
+    return 0;
 }
 
 int receive_info(int *rfds, int *wfds, size_t fds_n) {
-	//NOTE: this entire algorithm needs to run on a while loop to keep
-	//reading input. Shouldn't this have a fifo as output. That would 
-	//well emulate outputting everything to a socket for a more
-	//transparent implementation.
 	
-	int i,k;
-	size_t j;
-
 	//indexed by pad, then channel 
-	poly_t* h[N*T+1][N];    //T+1 coefficients of polynomial
-	ff256_t c[N*T+1][N][N]; //N checking pieces
-
-	ff256_t blankItem;
-	ff256_init(&blankItem);
+	ff256_t reference_element;
+	ff256_init(&reference_element);
 
 	/* Phase 1 */
-	char read_element;
-	char write_element;
-	//cycle through the pads
-	for (i=0; i<N*T+1; i++) {
-		//read all the transmitted information from each channel
-		
-		
-		//NOTE: this currently assumes that all information is 
-		//delivered perfectly. This assumption can and will be 
-		//relaxed later.
-		for (j=0; j<N; j++) {
-			//initialize each 
-			h[i][j] = poly_init(T, (element_t*) &blankItem);
-			
-			//read coefficients
-			for (k=0; k<T+1; k++) {
-				if (read(rfds[j], &read_element, 1) < 0) {
-					printf("psmt.c coef read error: %s", strerror(errno));
-				}
-				//printf("read:  pad %d, channel %d, coef %d\n", i, (int)j, k);
-				((ff256_t*) h[i][j]->coeffs[k])->val = (uint8_t) read_element;
-			}
-			//read checking pieces
-			for (k=0; k<N; k++) {
-				//initialize each element in c
-				ff256_init(&c[i][j][k]);
-				
-				if ( read(rfds[j], &read_element, 1) < 0) {
-					printf("psmt.c check read error: %s", strerror(errno));
-				}
-				//printf("read:  pad %d, channel %d, check %d\n", i, (int)j, k);
-				c[i][j][k].val = (uint8_t) read_element;
-			}
-		}
+	trans_packet phase1trans[N];
+	trans_contents phase1cont[N];
+
+	/* read the h polys and checking pieces from each channel and
+	 * convert to types compatible with fieldpoly */
+	for (int i=0; i<N; i++) {
+		read(rfds[i], phase1trans[i], sizeof(trans_packet));
+		trans2cont(phase1trans[i], phase1cont[i]);
 	}
 
 	/* Phase 2 */
 	unsigned int best_pad = find_best_pad(c,h);
-	unsigned int best_pad_failed = !!find_pad_conflicts(best_pad, c, h);
+	unsigned int best_pad_failed = !!find_pad_conflicts(best_pad, phase1cont);
 	
+	/* we will create censored copies of the phase1trans we received */ 
+	trans_contents phase1trans_censored[N];
 	if (best_pad_failed) {
-		for (int i=0; i<N*T+1; i++) {
-
-		
-		printf("best_pad failed");
-		//send lots of error correction info publically
-	} else {
-		for (j=0; j<N; j++) {
-			if (write(wfds[j], "S", 1) < 0) {
-				printf("send failed");
-			}
-			if (write(wfds[j], &write_element, 1) < 0) {
-				printf("send failed");
-			}
+		for (int i=0; i<N; i++0) {
+			//left off here
 		}
+	} else {
+		//publically send "SN" where N is best_pad
 	}
 
 	/* Phase 3 */
@@ -255,10 +204,10 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
  * on all the other pads. Such a pad is guaranteed to exist by a 
  * pidgeon hole argument. See PSMT p.41 */
 /* NOTE: this may require optimization*/
-int find_best_pad(poly_t *c[][][],ff256_t *h[][]) {
+int find_best_pad(trans_contents conts[]) {
 	int conflicts[N*T+1];
 	for (int i=0; i<N*T+1; i++) {
-		conflict[i] = find_pad_conflicts(i, c, h);	
+		conflict[i] = find_pad_conflicts(i, conts);	
 	}
 	for (int i=0; i<N*T+1; i++) {
 		int otherUnion = 0;
@@ -278,15 +227,17 @@ int find_best_pad(poly_t *c[][][],ff256_t *h[][]) {
  * A set of conflicts are returned in the following manner:
  * A conflict exists on wires n and m where n < m iff
  * result & (n*N + m) > 0 */
-int find_pad_conflicts(int pad, poly_t *c[][][],ff256_t *h[][]) {
+int find_pad_conflicts(int pad, trans_contents conts[]) {
 	assert(N*N <= sizeof int)
 	int toReturn = 0;
+	/*first index though wires*/
 	for (int i=0; i<N; i++) {
+		/*second index though wires*/
 		for (int j=i+1; j<N; j++) {
 			ff256_t x,*y;
 			x.val = i;
-			y = poly_eval(h[pad][j], x);
-			if (c[pad][i][j].val != y->val) {
+			y = poly_eval(conts[j].h[pad].val, x);
+			if (conts[i].c[pad][j].val != y->val) {
 				toReturn |= 1<<((i*N)+j);
 			}
 		}
@@ -294,24 +245,43 @@ int find_pad_conflicts(int pad, poly_t *c[][][],ff256_t *h[][]) {
 	return toReturn;
 }
 
-int pack2cont(trans_packet given, trans_contents result) {
+/* take the contents of given and puts them into result
+ * by converting uint8_t's to poly's for h polynomials */
+int pack2cont(trans_packet *given, trans_contents *result) {
 	ff256_t ref = ff256_init();
 	for (int i=0; i<N*T+1; i++) {
-		result.h[i] = poly_init(T+1, &ref);
+		result->h[i] = poly_init(T+1, &ref);
 		for (int j=0; j<T+1; j++) 
-			result.h[i]->coeffs[j] = given.h_vals[i][j];
+			result->h[i]->coeffs[j] = given->h_vals[i][j];
 		for (int j=0; j<N; j++) {
-			ff256_t c_ff256 = ff256_init();
-			c_ff256.val = given.c_vals[i][j];
-			result.c[i][j] = c_ff256;
+			ff256_t *c_ff256 = (ff256_t*) malloc(sizeof ff256_t);
+			ff256_init(c_ff256);
+			c_ff256->val = given->c_vals[i][j];
+			result->c[i][j] = c_ff256;
 		}
 	}
 	return 0;
 }
 
-int cont2pack(trans_contents given, trans_packet result) {
+/* take the contents of given and puts them into result
+ * by converting everything to uint8_t's */
+int cont2pack(trans_contents *given, trans_packet *result) {
 	for (int i=0; i<N*T+1; i++) {
 		for (int j=0; j<T+1; j++)
-			result.h[i][j] = given.h_vals[
+			result->h_vals[i][j] = given->h[i]->coeffs[j]->val;
+		for (int j=0; j<N; j++)
+			result->c_vals[i][j] = given->c[i][j]->val;
+	}
+}
 
-	b.
+/* free the ff256_t's and polynomials within a trans_cont and the
+ * trans_cont */
+int cont_free(trans_contents *given) {
+	for (int i=0; i<N*T+1; i++) {
+		poly_free(given->c[i]);
+		for (int j=0; j<N; j++) {
+			free(given->c[i][j]);
+		}
+	}
+	free(given);
+}
