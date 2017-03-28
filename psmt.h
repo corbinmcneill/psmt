@@ -3,10 +3,6 @@
 
 #include <stddef.h>
 
-#define N 5
-#define T 2
-#define SEC_LEN 100
-
 /* this holds all the polynomials and checking pieces for 
  * a round of communication on a single wire */
 typedef struct 
@@ -25,13 +21,22 @@ typedef struct
 	/* this aux uint8_t is used differently at different phases
 	 * Phase 1: not used
 	 * Phase 2: the best_pad that was selected
-	 * Phase 3: not used???
+	 * Phase 3: the ciphertext
 	 */
 	uint8_t aux; 
+	/* On Phase 2 whether or not a pad was successfully recovered
+	 * will be indicated at h_vals[best_pad][0]. If the pad was 
+	 * successfully recovered, 1. Otherwise, 0.
+	 */
 	uint8_t h_vals[N*T+1][T+1];
 	uint8_t c_vals[N*T+1][N];
 }__attribute__((packed))__ trans_packet;
 
+typedef struct
+{
+	ff256_t *pads[N*T+1];
+	poly_t *f[N*T+1];
+}
 
 /* send a secret
  * secret is the secret string

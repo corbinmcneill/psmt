@@ -10,18 +10,11 @@
 #include "fieldpoly/fieldpoly.h"
 #include "fieldpoly/ff256.h"
 
-void validateF(poly_t **f, size_t n) {
-	for (size_t i=0; i<n; i++) {
-		for (int j=0; j<(f[i]->degree+1); j++) {
-			assert(f[i]->coeffs[j]->size == sizeof(ff256_t));
-		}
-	}
-}
 
-int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n) {
-	//NOTE: Input for this algorithm should be a fifo. This would well 
-	//emulate input from a socket which would allow for long-term transparent
-	//approach for network rerouting. Also this should be a while loop.
+/* The next sequence number to use for a new transmission */
+unsigned long send_seq = 0; 
+
+int send_char(char secret) {
 
 	/* PHASE 1 */
 
@@ -88,29 +81,18 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 			}
 		}
 	}
+	/* set the proper round number on the packet */
 	for (int i=0; i<N; i++) {
 		data_pack[i].round_num = 1;
 	}
 
 	/* send the data_pack's we created */
 	for (int i=0; i<N; i++) {
-		if (write(wfds[i], data_pack[i], sizeof data_pack) < 0) {
-			printf("phase 1 write error: %s\n", strerror(errno));
+		if (mc_write(data_pack[i], i) < 0) {
+			printf("error: mc_write\n");
 		}
 	}
 
-	/* PHASE 2 */
-	
-	/* TODO: perform public read and determine whether a pad was successfully read.*/
-	int good_read = 1
-
-	/* PHASE 3 */
-	if (good_read) {
-		/*TODO public write xor'd secret */
-	} else {
-		/*TODO public read error correction information. This should probably
-		 * be a separate function */
-	} 
 
     /* free stuff */
     free(iter_element);
@@ -125,7 +107,25 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
     return 0;
 }
 
-int receive_info(int *rfds, int *wfds, size_t fds_n) {
+int send_spin() {
+	for (;;) {
+		/* perform public read and determine whether a pad was 
+	 	 * successfully read.*/
+		trans_packet phase2pack;
+		mc_read(*phase2pack, -1);
+
+		/* PHASE 3 */
+		if (phase2pack.h_vals[phase2pack.aux] > 0) {
+			/* the pad was successfully recovered, so simply write the 
+		 	 * ciphertext */
+			mc_write
+		} else {
+			/*TODO public send _something_ */ 
+		} 
+	}
+}
+
+int receive_spin() {
 	/*indexed by pad, then channel */
 	ff256_t reference_element;
 	ff256_init(&reference_element);
@@ -165,14 +165,11 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 	//all channels
 	//NOTE: we need to read all of the channels or else we'll corrupt our
 	//subsequent messages. 
-	char cipherchar;
-	for (j=0; j<N; j++) {
-		if (read(rfds[j], &cipherchar, 1) < 0) {
-			printf("ciphertext read failure: %s\n", strerror(errno));
-			exit(1);
-		}
-	}
-	uint8_t ciphertext = (uint8_t) cipherchar;
+
+	trans_packet phase3pack;
+	mc_read(*phase3pack, -1); /* public read the trans_pack */
+
+	uint8_t ciphertext = phase3pack.aux;
 
 	uint8_t onetimepad;
 	poly_t *f;
@@ -180,16 +177,18 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 		//collect and interperet fault info that was sent back
 		//we'll skip this for now
 	} else {
-		//do polynomial interpolation here to get the y-int of the 
-		//f polynomial
+		/* do polynomial interpolation here to get the y-int of the 
+		 * f polynomial */
+		
+		/* create the zero element of ff256 */
 		ff256_t zero;
 		ff256_init(&zero);
 		ff256_add_id((element_t*)&zero);
 
+		/* declare the X's and Y's for polynomial interpolation */
 		ff256_t *X[N];
 		ff256_t *Y[N];
 		
-		ff256_t y;
 		for (int i=0; i<N; i++) {
 		X[i] = malloc(sizeof(ff256_t));
 			ff256_init(X[i]);
@@ -197,11 +196,12 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 			Y[i] = (ff256_t*)h[best_pad][i]->coeffs[0];
 		}
 		f = interpolate((element_t**)X, (element_t**)Y, N);
-		//one time pad is always set to 0
+		// NOTE: one time pad is always set to 0 -- is this still
+		// true?
 		onetimepad = ((ff256_t*)f->coeffs[0])->val;
 	}
-	//At this point we have a padded message and a pad. Just recreate 
-	//the message
+	/* At this point we have a padded message and a pad. Just recreate 
+	 * the message */
 	char plaintext = ciphertext ^ onetimepad;
 	printf("%c", plaintext);
 	poly_free(f);
@@ -293,4 +293,12 @@ int cont_free(trans_contents *given) {
 		}
 	}
 	free(given);
+}
+
+void validateF(poly_t **f, size_t n) {
+	for (size_t i=0; i<n; i++) {
+		for (int j=0; j<(f[i]->degree+1); j++) {
+			assert(f[i]->coeffs[j]->size == sizeof(ff256_t));
+		}
+	}
 }
