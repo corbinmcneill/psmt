@@ -21,9 +21,13 @@ typedef struct
 typedef struct 
 {
 	unsigned long seq_num;
-	uint8_t missing_pad; /* this pad is missing in transmissions
-							after round 1 */
 	uint8_t round_num;
+	/* this aux uint8_t is used differently at different phases
+	 * Phase 1: not used
+	 * Phase 2: the best_pad that was selected
+	 * Phase 3: not used???
+	 */
+	uint8_t aux; 
 	uint8_t h_vals[N*T+1][T+1];
 	uint8_t c_vals[N*T+1][N];
 }__attribute__((packed))__ trans_packet;

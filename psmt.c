@@ -42,7 +42,7 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 	/*the polynomials with y-intercepts corresponding to the pads */
 	poly_t *f[N*T+1];
 
-	/*for each wire, the N*T+1 h polynomials and the associated checking
+	/* for each wire, the N*T+1 h polynomials and the associated checking
 	 * pieces to be sent for each pad */
 	trans_contents data[N];
 	/* the uint8_t representation of data. This is precicely the contents
@@ -74,6 +74,7 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 		 * pieces to be sent with the h's.*/
 		for (int j=0; j<N; j++) {
 			uint8_t h_element;
+			data_pack.round_num = 1;
 			/* iterate over the coefficients of each h poly */
 			for (int k=0; k<T+1; k++) { 
 				data_pack[j].h_vals[i][k] = 
@@ -117,12 +118,15 @@ int send_info(char *secret, size_t secret_n, int *rfds, int *wfds, size_t fds_n)
 	for (int i=0; i<N; i++) {
 		cont_free(phase1cont[i]);
     }
+    for (int j=0; j<N*T+1; j++) {
+    	free(pads[j]);
+    }
+
     return 0;
 }
 
 int receive_info(int *rfds, int *wfds, size_t fds_n) {
-	
-	//indexed by pad, then channel 
+	/*indexed by pad, then channel */
 	ff256_t reference_element;
 	ff256_init(&reference_element);
 
@@ -142,13 +146,18 @@ int receive_info(int *rfds, int *wfds, size_t fds_n) {
 	unsigned int best_pad_failed = !!find_pad_conflicts(best_pad, phase1cont);
 	
 	/* we will create censored copies of the phase1trans we received */ 
-	trans_contents phase1trans_censored[N];
-	if (best_pad_failed) {
-		for (int i=0; i<N; i++0) {
-			//left off here
+	for (int i=0; i<N; i++0) {
+		if (best_pad_failed) {
+			trans_contents phase1trans_censored[N];
+			phase1trans_censored[i] = phase1trans[i];
+			phase1trans_censored[i].round_num = 2;
+			phase1trans_censored[i].aux = best_pad;
+			memset(phase1trans_censored.h_vals[best_pad], 0, sizeof(uint8_t) * (T+1)); 
+			memset(phase1trans_censored.c_vals[best_pad], 0, sizeof(uint8_t) * (N)); 
+		} else {
+			/* publically send "SN" where N is best_pad */
+			trans_contents phase1trans_censored[N];
 		}
-	} else {
-		//publically send "SN" where N is best_pad
 	}
 
 	/* Phase 3 */
