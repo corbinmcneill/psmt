@@ -1,13 +1,13 @@
-#include "io.h"
+#include "mcio.h"
 
 int* wires;
 
-int init_io(int* fds, int n){
+int init_mcio(int* fds, int n){
     wires = fd;
 }
 
 
-int read(trans_packet* data, int wire) {
+int mc_read(trans_packet* data, int wire) {
 
 
 
