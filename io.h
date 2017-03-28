@@ -1,5 +1,18 @@
 #include "psmt.h"
 
+/* init_io -
+ *
+ * Initialize the io functions.
+ *
+ * fds - An array containing the file descriptors to use
+ *
+ * n - the number of file desicriptors in the array.
+ *
+ * Returns 0 on success and -1 on failure
+ */
+int init_io(int* fds, int n);
+
+
 
 /*
  * read -
@@ -16,7 +29,7 @@
  * returns 0 on success and -1 on error
  */
 
-int read(trans_packet* data, int* wire);
+int read(trans_packet* data, int wire);
 
 /*
  * write -
