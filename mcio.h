@@ -29,7 +29,7 @@ int init_mcio(int* fds, int n);
  * returns 0 on success and -1 on error
  */
 
-int mc_read(trans_packet* data, int wire);
+int mc_read(trans_packet* data, int* wire);
 
 /*
  * write -
