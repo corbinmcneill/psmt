@@ -10,7 +10,7 @@
  *
  * Returns 0 on success and -1 on failure
  */
-int init_io(int* fds, int n);
+int init_mcio(int* fds, int n);
 
 
 
@@ -29,7 +29,7 @@ int init_io(int* fds, int n);
  * returns 0 on success and -1 on error
  */
 
-int read(trans_packet* data, int wire);
+int mc_read(trans_packet* data, int wire);
 
 /*
  * write -
@@ -40,4 +40,4 @@ int read(trans_packet* data, int wire);
  * wire - the wire number to send it on. The public channel is wire -1.
  *
  */
-int write(trans_packet* data, int wire);
+int mc_write(trans_packet* data, int wire);
