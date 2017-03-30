@@ -5,14 +5,29 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <errno.h>
+#include <time.h>
 
 #include "psmt.h"
+#include "params.h"
 #include "fieldpoly/fieldpoly.h"
 #include "fieldpoly/ff256.h"
 
+trans_packet (*seq_buffer)[N];
+uint8_t (*seq_pads)[N*T+1];
+char *seq_secret;
+uint8_t *seq_completed;
+uint8_t *seq_times;
 
 /* The next sequence number to use for a new transmission */
-unsigned long send_seq = 0; 
+unsigned long current_seq = 0; 
+
+void psmt_init() {
+	seq_buffer = calloc(SEQ_BUFFER * N, sizeof trans_packet);
+	seq_pads = calloc(SEQ_BUFFER * (N*T+1), sizeof uint8_t);
+	seq_secret = calloc(SEQ_BUFFER, sizeof char);
+	seq_completed = calloc(SEQ_BUFFER, sizeof uint8_t);
+	seq_times = calloc(SEQ_BUFFER, sizeof uint8_t);
+}
 
 int send_char(char secret) {
 
@@ -92,7 +107,21 @@ int send_char(char secret) {
 			printf("error: mc_write\n");
 		}
 	}
+	
+	/* save information for error detection in phase 2 */
+	struct timespec s;
+	clock_gettime(CLOCK_REALTIME, &s);
+	seq_times[current_seq%SEQ_BUFFER] = round(s.tv_nsec/1.0e6);
+	seq_secret[current_seq%SEQ_BUFFER] = secret;	
+	for (int i=0; i<N; i++) {
+		seq_buffer[current_seq%SEQ_BUFFER][i] = data_pack[i];
+	}
+	for (int i=0; i<N*T+1; i++) {
+		seq_pads[current_seq%SEQ_BUFFER][i] = pads[i];
+	}
+	seq_completed[current_seq%SEQ_BUFFER] = 0;
 
+	current_seq += 1;
 
     /* free stuff */
     free(iter_element);
@@ -118,10 +147,18 @@ int send_spin() {
 		if (phase2pack.h_vals[phase2pack.aux] > 0) {
 			/* the pad was successfully recovered, so simply write the 
 		 	 * ciphertext */
-			mc_write
+			trans_packet cipher_packet;
+			cipher_packet.seq_num = phase2pack.seq_num;
+			cipher_packet.round_num = 3;
+			cipher_packet.aux = seq_secret[phase2pack.seq_num]^
+				seq_pads[phase2pack.seq_num][phase2pack.aux];
+			mc_write(cipher_packet, -1);
 		} else {
-			/*TODO public send _something_ */ 
+			/* TODO finish reading other channel's records
+			 * public send _something_ */ 
 		} 
+		/* TODO unset valid bit, elsewhere determine whether valid bit
+		 * is set before overwriting */
 	}
 }
 
