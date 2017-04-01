@@ -12,6 +12,12 @@
 #include "fieldpoly/fieldpoly.h"
 #include "fieldpoly/ff256.h"
 
+typedef struct
+{
+	ff256_t *pads[N*T+1];
+	poly_t *f[N*T+1];
+} history_unit;
+
 trans_packet (*seq_buffer)[N];
 uint8_t (*seq_pads)[N*T+1];
 char *seq_secret;

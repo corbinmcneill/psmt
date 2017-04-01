@@ -36,10 +36,4 @@ typedef struct
 	uint8_t c_vals[N*T+1][N];
 }__attribute__((packed)) trans_packet;
 
-typedef struct
-{
-	ff256_t *pads[N*T+1];
-	poly_t *f[N*T+1];
-} trans_contents;
-
 #endif
