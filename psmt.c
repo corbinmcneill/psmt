@@ -15,7 +15,7 @@
 trans_packet (*seq_buffer)[N];
 uint8_t (*seq_pads)[N*T+1];
 char *seq_secret;
-uint8_t *seq_completed;
+uint8_t *seq_valid;
 uint8_t *seq_times;
 
 /* The next sequence number to use for a new transmission */
@@ -25,7 +25,7 @@ void psmt_init() {
 	seq_buffer = calloc(SEQ_BUFFER * N, sizeof trans_packet);
 	seq_pads = calloc(SEQ_BUFFER * (N*T+1), sizeof uint8_t);
 	seq_secret = calloc(SEQ_BUFFER, sizeof char);
-	seq_completed = calloc(SEQ_BUFFER, sizeof uint8_t);
+	seq_valid = calloc(SEQ_BUFFER, sizeof uint8_t);
 	seq_times = calloc(SEQ_BUFFER, sizeof uint8_t);
 }
 
@@ -119,7 +119,7 @@ int send_char(char secret) {
 	for (int i=0; i<N*T+1; i++) {
 		seq_pads[current_seq%SEQ_BUFFER][i] = pads[i];
 	}
-	seq_completed[current_seq%SEQ_BUFFER] = 0;
+	seq_valid[current_seq%SEQ_BUFFER] = 1;
 
 	current_seq += 1;
 
@@ -144,23 +144,39 @@ int send_spin() {
 		mc_read(*phase2pack, -1);
 
 		/* PHASE 3 */
-		if (phase2pack.h_vals[phase2pack.aux] > 0) {
-			/* the pad was successfully recovered, so simply write the 
-		 	 * ciphertext */
-			trans_packet cipher_packet;
-			cipher_packet.seq_num = phase2pack.seq_num;
-			cipher_packet.round_num = 3;
-			cipher_packet.aux = seq_secret[phase2pack.seq_num]^
-				seq_pads[phase2pack.seq_num][phase2pack.aux];
-			mc_write(cipher_packet, -1);
-		} else {
-			/* TODO finish reading other channel's records
-			 * public send _something_ */ 
-		} 
-		/* TODO unset valid bit, elsewhere determine whether valid bit
-		 * is set before overwriting */
+		struct timespec s;
+		clock_gettime(CLOCK_REALTIME, &s);
+		long current_time = round(s.tv_nsec / 1.0e6);
+		
+		if (!seq_valid[phase2pack.seq_num]) {
+			/* TODO Just drop it? */
+		}
+		else if (current_time - seq_times[phase2pack.seq_num] > TIMEOUT) {
+			/* The (non-completed) sequence has timed out. Mark as 
+			 * invalid */
+		}
+		else {
+			if (phase2pack.h_vals[phase2pack.aux] > 0) {
+				/* the pad was successfully recovered, so simply write the 
+		 	 	 * ciphertext */
+				trans_packet cipher_packet;
+				cipher_packet.seq_num = phase2pack.seq_num;
+				cipher_packet.round_num = 3;
+				cipher_packet.aux = seq_secret[phase2pack.seq_num]^
+					seq_pads[phase2pack.seq_num][phase2pack.aux];
+				mc_write(cipher_packet, -1);
+			} else {
+				/* TODO finish reading other channel's records
+			 	 * public send _something_ */ 
+			} 
+			/* TODO elsewhere determine whether valid bit
+		 	 * is set before overwriting */
+		}
+		seq_valid[phase2pack.seq_num] = 0;
 	}
 }
+
+
 
 int receive_spin() {
 	/*indexed by pad, then channel */
