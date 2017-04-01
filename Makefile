@@ -16,6 +16,11 @@ receive: receive.c psmt.o debug.o fieldpoly
 	gcc $(CFLAGS) -c receive.c
 	gcc $(CFLAGS) receive.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o receive
 
+
+pq.o: pq.c 
+	gcc $(CFLAGS) -c pq.c
+	
+
 debug.o: debug.c debug.h
 	gcc $(CFLAGS) -c debug.c
 
