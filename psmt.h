@@ -40,7 +40,6 @@ typedef struct
 {
 	ff256_t *pads[N*T+1];
 	poly_t *f[N*T+1];
-}
-
+} trans_contents;
 
 #endif
