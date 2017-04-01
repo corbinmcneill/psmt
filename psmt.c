@@ -14,30 +14,30 @@
 
 typedef struct
 {
+	trans_packet *packets[N];
 	ff256_t *pads[N*T+1];
 	poly_t *f[N*T+1];
+	char secret;
+	uint8_t valid;
 } history_unit;
 
-trans_packet (*seq_buffer)[N];
-uint8_t (*seq_pads)[N*T+1];
-char *seq_secret;
-uint8_t *seq_valid;
-uint8_t *seq_times;
+history_unit *history;
 
 /* The next sequence number to use for a new transmission */
 unsigned long current_seq = 0; 
 
 void psmt_init() {
-	seq_buffer = calloc(SEQ_BUFFER * N, sizeof trans_packet);
-	seq_pads = calloc(SEQ_BUFFER * (N*T+1), sizeof uint8_t);
-	seq_secret = calloc(SEQ_BUFFER, sizeof char);
-	seq_valid = calloc(SEQ_BUFFER, sizeof uint8_t);
-	seq_times = calloc(SEQ_BUFFER, sizeof uint8_t);
+	history = calloc(HISTORY_SIZE, sizeof history_unit);
 }
 
 int send_char(char secret) {
 
-	/* PHASE 1 */
+	/* spin until the buffer is clear enough for us to advance.
+	 * This is a TERRBILE approach and will be fixed during
+	 * multithreaded refactoring */
+	while(history[current_seq%HISTORY_SIZE].valid) {
+		usleep(1000);
+	}
 
     /* ff256 evaluation of a polynomial */
     ff256_t* eval_element;
@@ -52,16 +52,16 @@ int send_char(char secret) {
     ff256_init(iter_element);
 
 	/*the pads generated for a single psmt iteration */
-	ff256_t *pads[N*T+1];
+	ff256_t *pads = calloc(N*T+1, sizeof ff256_t);
 	/*the polynomials with y-intercepts corresponding to the pads */
-	poly_t *f[N*T+1];
+	poly_t *f = calloc(N*T+1, sizeof poly_t);
 
 	/* for each wire, the N*T+1 h polynomials and the associated checking
 	 * pieces to be sent for each pad */
 	trans_contents data[N];
 	/* the uint8_t representation of data. This is precicely the contents
 	 * of the packet send on each wire */
-	trans_packet data_pack[N];
+	trans_packet *data_pack = calloc(N, sizeof trans_packet);
 
 	/* This iterates over each pad */
 	for (int i=0; i<N*T+1; i++) {
@@ -88,23 +88,23 @@ int send_char(char secret) {
 		 * pieces to be sent with the h's.*/
 		for (int j=0; j<N; j++) {
 			uint8_t h_element;
-			data_pack.round_num = 1;
+			data_pack[j]->round_num = 1;
 			/* iterate over the coefficients of each h poly */
 			for (int k=0; k<T+1; k++) { 
-				data_pack[j].h_vals[i][k] = 
+				data_pack[j]->h_vals[i][k] = 
 					((ff256_t*)data[j].h[i]->coeffs[k])->val;
 			}
 			/* evaluate h at N+1 places */
 			for (int k=1; k<N+1; k++) {
                 iter_element->val = k;
-                data_pack[j].c_vals[i][k] = 
+                data_pack[j]->c_vals[i][k] = 
                 	(ff256_t*)eval_poly(h[i][j], (element_t*)iter_element);
 			}
 		}
 	}
 	/* set the proper round number on the packet */
 	for (int i=0; i<N; i++) {
-		data_pack[i].round_num = 1;
+		data_pack[i]->round_num = 1;
 	}
 
 	/* send the data_pack's we created */
@@ -115,18 +115,14 @@ int send_char(char secret) {
 	}
 	
 	/* save information for error detection in phase 2 */
-	struct timespec s;
-	clock_gettime(CLOCK_REALTIME, &s);
-	seq_times[current_seq%SEQ_BUFFER] = round(s.tv_nsec/1.0e6);
-	seq_secret[current_seq%SEQ_BUFFER] = secret;	
-	for (int i=0; i<N; i++) {
-		seq_buffer[current_seq%SEQ_BUFFER][i] = data_pack[i];
-	}
-	for (int i=0; i<N*T+1; i++) {
-		seq_pads[current_seq%SEQ_BUFFER][i] = pads[i];
-	}
-	seq_valid[current_seq%SEQ_BUFFER] = 1;
+	history_unit *history_node = history+(current_seq%HISTORY_SIZE);
+	history_node->packets = data_pack;
+	history_node->pads = pads;
+	history_node->f = f;
+	history_node->secret = secret;
+	history_node->valid = 1;
 
+	/* advance the sequence number for the next send */
 	current_seq += 1;
 
     /* free stuff */
@@ -134,9 +130,6 @@ int send_char(char secret) {
     free(reference_element);
 	for (int i=0; i<N; i++) {
 		cont_free(phase1cont[i]);
-    }
-    for (int j=0; j<N*T+1; j++) {
-    	free(pads[j]);
     }
 
     return 0;
@@ -149,36 +142,32 @@ int send_spin() {
 		trans_packet phase2pack;
 		mc_read(*phase2pack, -1);
 
-		/* PHASE 3 */
 		struct timespec s;
 		clock_gettime(CLOCK_REALTIME, &s);
 		long current_time = round(s.tv_nsec / 1.0e6);
+
+		unsigned long local_seq = phase2pack.seq_num;
+		unsigned long local_seq_mod = local_seq % HISTORY_SIZE;
 		
-		if (!seq_valid[phase2pack.seq_num]) {
-			/* TODO Just drop it? */
-		}
-		else if (current_time - seq_times[phase2pack.seq_num] > TIMEOUT) {
-			/* The (non-completed) sequence has timed out. Mark as 
-			 * invalid */
+		if (history[local_seq_mod]->valid) {
+			/* Just drop it. This shouldn't happen often. */
 		}
 		else {
 			if (phase2pack.h_vals[phase2pack.aux] > 0) {
 				/* the pad was successfully recovered, so simply write the 
 		 	 	 * ciphertext */
 				trans_packet cipher_packet;
-				cipher_packet.seq_num = phase2pack.seq_num;
+				cipher_packet.seq_num = local_seq;
 				cipher_packet.round_num = 3;
-				cipher_packet.aux = seq_secret[phase2pack.seq_num]^
-					seq_pads[phase2pack.seq_num][phase2pack.aux];
+				cipher_packet.aux = history[local_seq_mod]->secret ^
+					history[local_seq_mod]->pads[phase2pack.aux];
 				mc_write(cipher_packet, -1);
 			} else {
 				/* TODO finish reading other channel's records
 			 	 * public send _something_ */ 
 			} 
-			/* TODO elsewhere determine whether valid bit
-		 	 * is set before overwriting */
 		}
-		seq_valid[phase2pack.seq_num] = 0;
+		history[local_seq_mod]->valid = 0;
 	}
 }
 
@@ -189,7 +178,6 @@ int receive_spin() {
 	ff256_t reference_element;
 	ff256_init(&reference_element);
 
-	/* Phase 1 */
 	trans_packet phase1trans[N];
 	trans_contents phase1cont[N];
 
@@ -200,7 +188,6 @@ int receive_spin() {
 		trans2cont(phase1trans[i], phase1cont[i]);
 	}
 
-	/* Phase 2 */
 	unsigned int best_pad = find_best_pad(c,h);
 	unsigned int best_pad_failed = !!find_pad_conflicts(best_pad, phase1cont);
 	
@@ -219,7 +206,6 @@ int receive_spin() {
 		}
 	}
 
-	/* Phase 3 */
 	//NOTE: in the future this secret message will need a majority vote from
 	//all channels
 	//NOTE: we need to read all of the channels or else we'll corrupt our
