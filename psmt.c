@@ -18,7 +18,7 @@ typedef struct
 	ff256_t *pads[N*T+1];
 	poly_t *f[N*T+1];
 	char secret;
-	uint8_t valid;
+	uint8_t valid; /*used as count by receiver */
 } history_unit;
 
 history_unit *history;
@@ -142,10 +142,7 @@ int send_spin() {
 		trans_packet phase2pack;
 		mc_read(*phase2pack, -1);
 
-		struct timespec s;
-		clock_gettime(CLOCK_REALTIME, &s);
-		long current_time = round(s.tv_nsec / 1.0e6);
-
+		/* these values will be used repeatedly */
 		unsigned long local_seq = phase2pack.seq_num;
 		unsigned long local_seq_mod = local_seq % HISTORY_SIZE;
 		
@@ -153,64 +150,102 @@ int send_spin() {
 			/* Just drop it. This shouldn't happen often. */
 		}
 		else {
-			if (phase2pack.h_vals[phase2pack.aux] > 0) {
-				/* the pad was successfully recovered, so simply write the 
-		 	 	 * ciphertext */
-				trans_packet cipher_packet;
-				cipher_packet.seq_num = local_seq;
-				cipher_packet.round_num = 3;
-				cipher_packet.aux = history[local_seq_mod]->secret ^
-					history[local_seq_mod]->pads[phase2pack.aux];
-				mc_write(cipher_packet, -1);
-			} else {
-				/* TODO finish reading other channel's records
-			 	 * public send _something_ */ 
+			trans_packet cipher_packet;
+			memset(&cipher_packet, 0, sizeof trans_packet);
+			if (phase2pack.h_vals[phase2pack.aux] == 0) {
+				/* finish reading other channel's records */
+			 	trans_packet phase2packs[N]; 
+			 	memset(phase2packs, 0, N*(sizeof trans2cont));
+			 	phase2packs[0] = phase2pack;
+			 	for (int i=1; i<N i++) {
+			 		int wire;
+			 		mc_read(phase2packs+i, &wire, 2);
+			 		/* Make sure these reads are public. If they are
+			 		 * not there is a mistake in mcio. */
+			 		if (wire != -1) {
+						printf("send_spin error: received non-public "
+						       "read when expecting public read.\n" 
+						exit(1);
+			 		}
+			 	}
+			 	for (int i=0; i<N i++) {
+			 		/* check which channels' transmissions were corrupted */
+			 		if (memcmp(phase2packs[i],
+			 		    *history[local_seq_mod].packets[i], 
+			 		    sizeof trans_packet)) {
+
+						cipher_packet.c_vals[0][i] = 1; 
+			 		}
+			 	}
 			} 
+			cipher_packet.seq_num = local_seq;
+			cipher_packet.round_num = 3;
+			cipher_packet.aux = history[local_seq_mod]->secret ^
+				history[local_seq_mod]->pads[local_seq];
+			mc_write(cipher_packet, -1);
 		}
 		history[local_seq_mod]->valid = 0;
+		/* TODO free this history block and all it's parts here */
 	}
 }
 
+int receiver_phase1(int wire, trans_packet phase1pack) {
+	/* check the wire number */
+	if (wire < 0 || wire >= N ) {
+		printf("receiver_phase1 error: invalid wire number\n");
+		exit(1);
+	} 
 
+	/* these values will be used repeatedly */
+	unsigned long local_seq = phase2pack.seq_num;
+	unsigned long local_seq_mod = local_seq % HISTORY_SIZE;
 
-int receive_spin() {
-	/*indexed by pad, then channel */
-	ff256_t reference_element;
-	ff256_init(&reference_element);
-
-	trans_packet phase1trans[N];
-	trans_contents phase1cont[N];
-
-	/* read the h polys and checking pieces from each channel and
-	 * convert to types compatible with fieldpoly */
-	for (int i=0; i<N; i++) {
-		read(rfds[i], phase1trans[i], sizeof(trans_packet));
-		trans2cont(phase1trans[i], phase1cont[i]);
+	if (! history[local_seq_mod].valid) {
+		memset(history[local_seq_mod],0,sizeof history_unit); 
 	}
 
-	unsigned int best_pad = find_best_pad(c,h);
-	unsigned int best_pad_failed = !!find_pad_conflicts(best_pad, phase1cont);
-	
-	/* we will create censored copies of the phase1trans we received */ 
-	for (int i=0; i<N; i++0) {
-		if (best_pad_failed) {
-			trans_contents phase1trans_censored[N];
-			phase1trans_censored[i] = phase1trans[i];
-			phase1trans_censored[i].round_num = 2;
-			phase1trans_censored[i].aux = best_pad;
-			memset(phase1trans_censored.h_vals[best_pad], 0, sizeof(uint8_t) * (T+1)); 
-			memset(phase1trans_censored.c_vals[best_pad], 0, sizeof(uint8_t) * (N)); 
-		} else {
-			/* publically send "SN" where N is best_pad */
-			trans_contents phase1trans_censored[N];
+	history[local_seq_mod].packets[wire] = phase1pack;
+	history[local_seq_mod].valid++;
+
+	/* wait until we have all the packets for a sequence and then
+	 * process it. Recall that, at timeout, dummy packets will be
+	 * returned from mcio, so we will ALWAYS receive the full N
+	 * trans_packets for this sequence. */
+	if (history[local_seq_mod].valid == N) {
+		trans_packet contents[N];
+		for (int i=0; i<N; i++) {
+			pack2cont(history[local_seq_mod].packets[i], contents+i);
 		}
 	}
 
-	//NOTE: in the future this secret message will need a majority vote from
-	//all channels
-	//NOTE: we need to read all of the channels or else we'll corrupt our
-	//subsequent messages. 
+	int best_pad = find_best_pad(contents);
+	int best_pad_failed = !!find_pad_conflicts(best_pad, contents);
 
+	if (best_pad_failed) {
+		/* send back censored information */
+	} 
+	else {
+		
+	}
+	
+	if (best_pad_failed) {
+		trans_contents phase1trans_censored[N];
+		for (int i=0; i<N; i++0) {
+			phase1trans_censored[i] = phase1trans[i];
+			phase1trans_censored[i].round_num = 2;
+			phase1trans_censored[i].aux = best_pad;
+			memset(phase1trans_censored.h_vals[best_pad], 0,
+			       sizeof(uint8_t) * (T+1)); 
+			memset(phase1trans_censored.c_vals[best_pad], 0,
+			       sizeof(uint8_t) * (N)); 
+		}
+		//TODO left off here
+	} else {
+
+	} 
+
+}
+int receiver_phase3(trans_packet phase3pack) {
 	trans_packet phase3pack;
 	mc_read(*phase3pack, -1); /* public read the trans_pack */
 
@@ -250,8 +285,27 @@ int receive_spin() {
 	char plaintext = ciphertext ^ onetimepad;
 	printf("%c", plaintext);
 	poly_free(f);
+}
 
-	return 0;
+int receive_spin() {
+	for (;;) {
+		/* read a trans_pack */
+		trans_packet packet;
+		int wire;
+		mc_read(*packet, &wire); 
+
+		/* handle the trans_pack differently depending on 
+		 * the round_num */
+		if (packet.round_num == 1) {
+			receiver_phase1(wire, packet);
+		} else if (packet.round_num == 3) {
+			receiver_phase3(wire, packet);
+		} else {
+			printf("receive_spin error: received packet with invalid"
+		       	   "round number\n");
+			exit(1);
+		}
+	}
 }
 
 /* find the pad whose wire conflicts are subset of the wire conflicts

@@ -33,6 +33,9 @@ typedef struct
 	 * successfully recovered, 1. Otherwise, 0.
 	 */
 	uint8_t h_vals[N*T+1][T+1];
+	/* On Phase 3 whether a fault was detected on wire will be 
+	 * indicated by c_vals[0][i]. If there was a fault, 1. 
+	 * Otherwise, 0. */
 	uint8_t c_vals[N*T+1][N];
 }__attribute__((packed)) trans_packet;
 
