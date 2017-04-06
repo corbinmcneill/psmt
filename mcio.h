@@ -1,4 +1,13 @@
+#ifndef MCIO_H
+#define MCIO_H
 #include "psmt.h"
+
+
+typedef struct {
+    trans_packet tp;
+    int wire;
+} mc_packet;
+
 
 /* init_io -
  *
@@ -29,7 +38,7 @@ int mc_init(int* fds, int n);
  * returns 0 on success and -1 on error
  */
 
-int mc_read(trans_packet* data, int* wire,int round);
+int mc_read(trans_packet* data, int* wire);
 
 /*
  * write -
@@ -49,3 +58,5 @@ int mc_write(trans_packet* data, int wire);
  */
 
 int mc_destroy();
+
+#endif
