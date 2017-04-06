@@ -39,4 +39,9 @@ typedef struct
 	uint8_t c_vals[N*T+1][N];
 }__attribute__((packed)) trans_packet;
 
+void psmt_init();
+int send_char(char secret);
+int send_spin();
+int receive_spin();
+
 #endif
