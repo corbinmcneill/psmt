@@ -8,16 +8,15 @@ fieldpoly:
 psmt.o: psmt.c psmt.h fieldpoly mcio.h
 	gcc $(CFLAGS) -c psmt.c
 
-send: send.c psmt.o debug.o fieldpoly
+send: send.c psmt.o mcio.o debug.o fieldpoly
 	gcc $(CFLAGS) -c send.c
-	gcc $(CFLAGS) send.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o send
+	gcc $(CFLAGS) send.o mcio.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o send
 
-receive: receive.c psmt.o debug.o fieldpoly
+receive: receive.c psmt.o mcio.o debug.o fieldpoly
 	gcc $(CFLAGS) -c receive.c
-	gcc $(CFLAGS) receive.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o receive
+	gcc $(CFLAGS) receive.o mcio.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o receive
 
-
-mcio.o: mcio.c pq.o
+mcio.o: mcio.c mcio.h pq.o
 	gcc $(CFLAGS) -c mcio.c
 
 pqtest: pqtest.c pq.o debug.o 
