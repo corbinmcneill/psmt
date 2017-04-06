@@ -17,11 +17,11 @@ int main() {
 		snprintf(rfilename,FNAME_LEN,"pipes/pipe_a_%d",i);
 		snprintf(wfilename,FNAME_LEN,"pipes/pipe_b_%d",i);
 		if ((rfds[i] = open(rfilename,O_RDONLY)) < 0) {
-			printf("receive.c: read open fail");
+			printf("send.c: read open fail");
 			exit(-1);
 		}
 		if ((wfds[i] = open(wfilename,O_WRONLY)) < 0) {
-			printf("receive.c: write open fail");
+			printf("send.c: write open fail");
 			exit(-1);
 		}
 	}

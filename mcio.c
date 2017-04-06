@@ -54,10 +54,14 @@ int mc_read(trans_packet* data, int* wire) {
 }
 
 int mc_write(trans_packet* data, int wire) {
-   mc_packet toWrite;
-   toWrite.tp = *data;
-   toWrite.wire = wire;
-  //TODO: write 
+   int byteswritten = write(wire, data, sizeof(trans_packet));
+   assert(byteswritten == sizeof(transpacket));
+   if (wire == -1) {
+       for (int i = 0; i < numwires; i++) {
+           byteswritten = write(wires[i], data, sizeof(trans_packer));
+           assert(byteswritten == sizeof(transpacket));
+       }
+   }
    return 0;
 }
 

@@ -1,5 +1,6 @@
 #!/bin/bash
 rm -f pipes/*
+mkdir -p pipes
 for i in {0..4}
 do
 	mkfifo "pipes/pipe_a_$i"
