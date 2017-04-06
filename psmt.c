@@ -155,7 +155,7 @@ int send_spin() {
 			if (phase2pack.h_vals[phase2pack.aux] == 0) {
 				/* finish reading other channel's records */
 			 	trans_packet phase2packs[N]; 
-			 	memset(phase2packs, 0, N*(sizeof trans2cont));
+			 	//memset(phase2packs, 0, N*(sizeof trans2cont));
 			 	phase2packs[0] = phase2pack;
 			 	for (int i=1; i<N i++) {
 			 		int wire;
@@ -185,7 +185,9 @@ int send_spin() {
 			mc_write(cipher_packet, -1);
 		}
 		history[local_seq_mod]->valid = 0;
-		/* TODO free this history block and all it's parts here */
+		/* TODO free history block and all it's contents. Note that some of
+		 * the contents are likely currently on the stack so they should be
+		 * moved on to the heap. */
 	}
 }
 
@@ -223,28 +225,30 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 
 	if (best_pad_failed) {
 		/* send back censored information */
-	} 
-	else {
-		
-	}
-	
-	if (best_pad_failed) {
-		trans_contents phase1trans_censored[N];
 		for (int i=0; i<N; i++0) {
-			phase1trans_censored[i] = phase1trans[i];
-			phase1trans_censored[i].round_num = 2;
-			phase1trans_censored[i].aux = best_pad;
+			/* build the censored packet */
+			trans_contents phase1trans_censored;
+			phase1trans_censored = phase1trans[i];
+			phase1trans_censored.round_num = 2;
+			phase1trans_censored.aux = best_pad;
 			memset(phase1trans_censored.h_vals[best_pad], 0,
 			       sizeof(uint8_t) * (T+1)); 
 			memset(phase1trans_censored.c_vals[best_pad], 0,
 			       sizeof(uint8_t) * (N)); 
+			/* send the censored packet */
+			mc_write(phase2pack, -1);
 		}
-		//TODO left off here
 	} else {
-
+		/* send back OK, best_pad */
+		trans_packet phase2ok;
+		phase2ok.seq_num = local_seq;
+		phase2ok.round_num = 2;
+		phase2ok.aux = best_pad;
+		phase2ok.h_vals[best_pad] = 1;
+		mc_write(phase2ok, -1);
 	} 
-
 }
+
 int receiver_phase3(trans_packet phase3pack) {
 	trans_packet phase3pack;
 	mc_read(*phase3pack, -1); /* public read the trans_pack */
@@ -253,13 +257,37 @@ int receiver_phase3(trans_packet phase3pack) {
 
 	uint8_t onetimepad;
 	poly_t *f;
+	trans_contents conts[N];
+	int counter;
 	if (best_pad_failed) {
-		//collect and interperet fault info that was sent back
-		//we'll skip this for now
+		/* convert all of our good packets to trans_content */
+		counter = 0;
+		for (int i=0; i<N; i++) {
+			if (! phase3pack.c_vals[0][i]) {
+				pack2cont(history.packets[i], conts+count);
+				counter++;
+			}
+		}
 	} else {
-		/* do polynomial interpolation here to get the y-int of the 
-		 * f polynomial */
+		/* convert our N packets to trans_contents */
+		for (int i=0; i<N; i++) {
+			pack2cont(history.packets[i], conts+i);
+		}
+		count = N;
+	}
+	/* do polynomial interpolation here to get the y-int of the 
+	 * f polynomial */
+	onetimepad = retrieve_pad(conts, count, best_pad);
 		
+	/* At this point we have a padded message and a pad. Just recreate 
+	 * the message */
+	char plaintext = ciphertext ^ onetimepad;
+	printf("%c", plaintext);
+	poly_free(f);
+}
+
+/* retrieve the pad designated by pad_num. */
+uint8_t retrieve_pad(trans_contents* info, int info_n, int pad_num) {
 		/* create the zero element of ff256 */
 		ff256_t zero;
 		ff256_init(&zero);
@@ -270,21 +298,20 @@ int receiver_phase3(trans_packet phase3pack) {
 		ff256_t *Y[N];
 		
 		for (int i=0; i<N; i++) {
-		X[i] = malloc(sizeof(ff256_t));
+			X[i] = malloc(sizeof(ff256_t));
 			ff256_init(X[i]);
 			ff256_set(i+1, X[i]);
-			Y[i] = (ff256_t*)h[best_pad][i]->coeffs[0];
+			Y[i] = (ff256_t*)info[i].h[pad_num]->coeffs[0];
 		}
 		f = interpolate((element_t**)X, (element_t**)Y, N);
+		
 		// NOTE: one time pad is always set to 0 -- is this still
 		// true?
 		onetimepad = ((ff256_t*)f->coeffs[0])->val;
-	}
-	/* At this point we have a padded message and a pad. Just recreate 
-	 * the message */
-	char plaintext = ciphertext ^ onetimepad;
-	printf("%c", plaintext);
-	poly_free(f);
+
+		free(f);
+
+		return onetimepad;
 }
 
 int receive_spin() {
