@@ -5,7 +5,7 @@ all: send receive fieldpoly
 fieldpoly:
 	make -C fieldpoly	
 
-psmt.o: psmt.c psmt.h fieldpoly
+psmt.o: psmt.c psmt.h fieldpoly mcio.h
 	gcc $(CFLAGS) -c psmt.c
 
 send: send.c psmt.o debug.o fieldpoly
