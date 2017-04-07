@@ -27,7 +27,8 @@ int main() {
 	}
 
 	char *message = "test message\n"; 
-	printf("calling send_info\n");
-	send_info(message, strlen(message), rfds, wfds, N);
+
+	/* thread spawn here */
+
 	return 0;
 }

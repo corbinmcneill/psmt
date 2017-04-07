@@ -37,7 +37,7 @@ int main() {
 		}
 	}
 
-	printf("calling receive_info\n");
-	receive_info(rfds, wfds, N);
+	/* thread spawn here */
+
 	return 0;
 }
