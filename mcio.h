@@ -13,13 +13,15 @@ typedef struct {
  *
  * Initialize the io functions.
  *
- * fds - An array containing the file descriptors to use
+ * wfds - An array containing the write file descriptors to use
  *
- * n - the number of file desicriptors in the array.
+ * rfds - An array containing the read file descriptors to use
+ *
+ * n - the number of file desicriptors in the arrays.
  *
  * Returns 0 on success and -1 on failure
  */
-int mc_init(int* fds, int n);
+int mc_init(int* fds, int* wfds, int n);
 
 
 
@@ -35,7 +37,7 @@ int mc_init(int* fds, int n);
  *                trans_packet
  * wire - the wire number the trans_packet was recieved on. 
  *
- * returns 0 on success and -1 on error
+ * returns 1 on read, 0 on no data, and -1 on error
  */
 
 int mc_read(trans_packet* data, int* wire);
@@ -47,6 +49,8 @@ int mc_read(trans_packet* data, int* wire);
  * trans_packet - the packet to send
  *
  * wire - the wire number to send it on. The public channel is wire -1.
+ *
+ * 1 on success, -1 on error.
  *
  */
 int mc_write(trans_packet* data, int wire);

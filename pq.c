@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "pq.h"
+#include "debug.h"
 
 int parent(int node){
     return node/2;
@@ -56,11 +57,13 @@ mc_packet pop(tppq* pq){
     pq->arr[0] = pq->arr[pq->size-1];
     pq->size--;
     min_heapify(pq,0);
+    debug("Popped packet: wire=%d, seq=%d,round=%d, pqsize=%d\n",
     return to_return;
 }
 
 void insert(tppq* pq, mc_packet* item) {
     assert(pq->size != pq->maxsize);
+    
     pq->size++;
     int i = pq->size-1;
     pq->arr[i] = *item;

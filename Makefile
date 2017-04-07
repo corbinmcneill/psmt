@@ -1,6 +1,8 @@
-CFLAGS= -ggdb -Wall -Wextra -std=gnu11 -Wno-unused-variable -Wno-unused-parameter
+CFLAGS= -pthread -ggdb -Wall -Wextra -std=gnu11 -Wno-unused-variable -Wno-unused-parameter
 
 all: send receive fieldpoly
+
+mc: mciotestreceive mciotestsend
 
 fieldpoly:
 	make -C fieldpoly	
@@ -17,14 +19,23 @@ receive: receive.c psmt.o debug.o fieldpoly
 	gcc $(CFLAGS) receive.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o receive
 
 
-mcio.o: mcio.c pq.o
+mciotestreceive: mciotestreceive.c mcio.o pq.o debug.o
+	gcc $(CFLAGS) -c mciotestreceive.c
+	gcc $(CFLAGS) mciotestreceive.o mcio.o debug.o pq.o -o mciotestreceive
+
+mciotestsend: mciotestsend.c mcio.o pq.o debug.o
+	gcc $(CFLAGS) -c mciotestsend.c
+	gcc $(CFLAGS) mciotestsend.o mcio.o debug.o pq.o -o mciotestsend
+
+
+mcio.o: mcio.c debug.o pq.o
 	gcc $(CFLAGS) -c mcio.c
 
 pqtest: pqtest.c pq.o debug.o 
 	gcc $(CFLAGS) -c pqtest.c
 	gcc $(CFLAGS) pq.o pqtest.o debug.o -o pqtest
 
-pq.o: pq.c 
+pq.o: pq.c debug.c debug.h
 	gcc $(CFLAGS) -c pq.c
 
 
