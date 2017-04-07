@@ -58,6 +58,7 @@ mc_packet pop(tppq* pq){
     pq->size--;
     min_heapify(pq,0);
     debug("Popped packet: wire=%d, seq=%d,round=%d, pqsize=%d\n",
+            to_return.wire, to_return.tp.seq_num, to_return.tp.round_num,pq->size);
     return to_return;
 }
 
@@ -67,6 +68,8 @@ void insert(tppq* pq, mc_packet* item) {
     pq->size++;
     int i = pq->size-1;
     pq->arr[i] = *item;
+    debug("inserted packet: wire=%d, seq=%d,round=%d, pqsize=%d\n",
+            item->wire, item->tp.seq_num, item->tp.round_num,pq->size);
     while (i > 0 && mc_packet_comp(&pq->arr[parent(i)],&pq->arr[i]) > 0 ){
         swap(pq, parent(i), i);
         i = parent(i);

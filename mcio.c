@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <errno.h>
 #include <pthread.h>
 #include <fcntl.h>
 #include <assert.h>
@@ -56,13 +57,15 @@ int mc_read(trans_packet* data, int* wire) {
     if (pq.size == 0){
         return 0;
     }
-    mc_packet toReturn = pop(&pq);
-    *data = toReturn.tp;
+    mc_packet received = pop(&pq);
+    *data = received.tp;
+    *wire = received.wire;
     return 1;
 }
 
 int mc_write(trans_packet* data, int wire) {
-   debug("writing packet, sequence %d, round %d\n", data->seq_num, data->round_num);
+   debug("writing packet, sequence %d, round %d, wire %d\n", 
+           data->seq_num, data->round_num, wire);
    int byteswritten = write(wfds[wire], data, sizeof(trans_packet));
    assert(byteswritten == sizeof(trans_packet));
    if (wire == -1) {
@@ -77,17 +80,21 @@ int mc_write(trans_packet* data, int wire) {
 //TODO: add epoll
 void* listener(void *threadid) {
     mc_packet* input = malloc(sizeof(mc_packet));
-    size_t bytesread;
+    int bytesread;
     debug("starting listener\n");
     while(1) {
        for (int i = 0; i < numwires; i++){
+           usleep(50);
            bytesread = read(rfds[i],&(input->tp),sizeof(trans_packet)); 
-           if (bytesread > 0 ) {
+           if (bytesread == sizeof(trans_packet) ) {
                 input->wire = i;
                 debug("listener got packet, sequence %d, round %d\n", input->tp.seq_num, input->tp.round_num);
                 pthread_mutex_lock(&pq_lock);
                 insert(&pq, input);
                 pthread_mutex_unlock(&pq_lock);
+           }
+           else if ((bytesread != 0) && (bytesread != -1 && errno != EAGAIN)){
+               debug("Read error, read %d bytes\n",bytesread);
            }
        }
     }

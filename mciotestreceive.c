@@ -39,7 +39,7 @@ int main() {
 	debug("receiving stuff\n");
     mc_init(rfds,wfds,N);
     while (1) {
-        usleep(50);
+        usleep(500);
         trans_packet data;
         int wire;
         if (mc_read(&data, &wire)) {
