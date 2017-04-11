@@ -19,6 +19,10 @@ void initpq(tppq* pq,int maxsize) {
     pq->maxsize = maxsize;
 } 
 
+void destroypq(tppq* pq) {
+    free(pq->arr);
+}
+
 int mc_packet_comp(mc_packet* a, mc_packet* b) {
     int seqdiff = a->tp.seq_num - b->tp.seq_num;
     if (seqdiff == 0)

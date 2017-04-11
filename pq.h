@@ -11,6 +11,7 @@ typedef struct {
 } tppq;
 
 void initpq(tppq* pq, int maxsize);
+void destroypq(tppq* pq); 
 void insert( tppq* pq, mc_packet* item);
 mc_packet pop(tppq* pq);
 

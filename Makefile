@@ -10,13 +10,13 @@ fieldpoly:
 psmt.o: psmt.c psmt.h fieldpoly mcio.h
 	gcc $(CFLAGS) -c psmt.c
 
-send: send.c psmt.o mcio.o debug.o fieldpoly
+send: send.c psmt.o mcio.o debug.o pq.o fieldpoly
 	gcc $(CFLAGS) -c send.c
-	gcc $(CFLAGS) send.o mcio.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o send
+	gcc $(CFLAGS) send.o mcio.o pq.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o send
 
-receive: receive.c psmt.o mcio.o debug.o fieldpoly
+receive: receive.c psmt.o mcio.o debug.o pq.o fieldpoly
 	gcc $(CFLAGS) -c receive.c
-	gcc $(CFLAGS) receive.o mcio.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o receive
+	gcc $(CFLAGS) receive.o mcio.o pq.o psmt.o debug.o fieldpoly/fieldpoly.o fieldpoly/ff256.o fieldpoly/element.o -o receive
 
 mciotestreceive: mciotestreceive.c mcio.o pq.o debug.o
 	gcc $(CFLAGS) -c mciotestreceive.c
@@ -34,7 +34,7 @@ pqtest: pqtest.c pq.o debug.o
 	gcc $(CFLAGS) -c pqtest.c
 	gcc $(CFLAGS) pq.o pqtest.o debug.o -o pqtest
 
-pq.o: pq.c debug.c debug.h
+pq.o: pq.c pq.h debug.c debug.h
 	gcc $(CFLAGS) -c pq.c
 
 
