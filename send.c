@@ -1,13 +1,15 @@
 #include "psmt.h"
 #include <fcntl.h>
-#include <errno.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <pthread.h>
 
-#define FNAME_LEN 50
+char *message = "test message\n"; 
+unsigned int message_n = 13;
 
 int main() {
 	int i;
@@ -26,9 +28,25 @@ int main() {
 		}
 	}
 
-	char *message = "test message\n"; 
+	psmt_init();
 
-	/* thread spawn here */
+	/* Note: with proper synchronization, this code could
+	 * (and should) be extended later on to support multiple
+	 * spinning threads. */
+	pthread_t sender_spin;
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	if (pthread_create(&sender_spin, &attr, send_spin, NULL)) {
+		printf("send error: thread_create - %s", strerror(errno));
+		return 1;
+	}
+
+	for (unsigned int i=0; i<message_n; i++) {
+		send_char(message[i]);
+	}
+	
+	pthread_cancel(&sender_spin);
+	pthread_attr_destroy(&attr);
 
 	return 0;
 }
