@@ -37,7 +37,6 @@ int main() {
 		}
 	}
 
-	/* thread spawn here */
 
 	return 0;
 }
