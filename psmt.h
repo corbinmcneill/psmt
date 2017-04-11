@@ -39,9 +39,22 @@ typedef struct
 	uint8_t c_vals[N*T+1][N];
 }__attribute__((packed)) trans_packet;
 
+/* these are the publically accessible methods for interfacing
+ * with PSMT */
 void psmt_init();
 int send_char(char secret);
 int send_spin();
 int receive_spin();
+
+/* these don't actually need to be publically accessible but
+ * we want to unit test them */
+int cont_free(trans_contents *given);
+int pack2cont(trans_packet *given, trans_contents *result);
+int cont2pack(trans_contents *given, trans_packet *result);
+int find_best_pad(trans_contents conts[]);
+int find_pad_conflicts(int pad, trans_contents conts[]);
+uint8_t retrieve_pad(trans_contents* info, int info_n, int pad_num);
+int receiver_phase1(int wire, trans_packet phase1pack);
+int receiver_phase3(trans_packet phase3pack);
 
 #endif

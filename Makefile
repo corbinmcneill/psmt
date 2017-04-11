@@ -1,5 +1,7 @@
 CFLAGS= -pthread -ggdb -Wall -Wextra -std=gnu11 -Wno-unused-variable -Wno-unused-parameter
 
+.PHONY: all fieldpoly clean mc
+
 all: send receive fieldpoly
 
 mc: mciotestreceive mciotestsend
@@ -37,8 +39,9 @@ pqtest: pqtest.c pq.o debug.o
 pq.o: pq.c debug.c debug.h
 	gcc $(CFLAGS) -c pq.c
 
-
-	
+psmt_test: psmt_test.c psmt.o mcio.o
+	gcc $(CFLAGS) -c psmt_test.c 
+	gcc $(CFLAGS) psmt_test.o psmt.o mcio.o fieldpoly/ff256.o fieldpoly/fieldpoly.o -o psmt_test
 
 debug.o: debug.c debug.h
 	gcc $(CFLAGS) -c debug.c
@@ -48,3 +51,4 @@ clean:
 	rm -f send 
 	rm -f receive
 	rm -f pipes/*
+	make -C fieldpoly clean

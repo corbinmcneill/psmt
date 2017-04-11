@@ -13,12 +13,16 @@
 #include "fieldpoly/ff256.h"
 #include "mcio.h"
 
+/*
 int cont_free(trans_contents *given);
 int pack2cont(trans_packet *given, trans_contents *result);
 int cont2pack(trans_contents *given, trans_packet *result);
 int find_best_pad(trans_contents conts[]);
 int find_pad_conflicts(int pad, trans_contents conts[]);
 uint8_t retrieve_pad(trans_contents* info, int info_n, int pad_num);
+int receiver_phase1(int wire, trans_packet phase1pack) {
+int receiver_phase3(trans_packet phase3pack) {
+*/
 
 typedef struct
 {
@@ -94,7 +98,7 @@ int send_char(char secret) {
 
             free(eval_element);
 		}
-		ssize_t n;
+		// ssize_t n; why is this here?
 		/* Iterate over each channel. For each channel, generate the checking
 		 * pieces to be sent with the h's.*/
 		for (int j=0; j<N; j++) {
@@ -114,6 +118,7 @@ int send_char(char secret) {
 			}
 		}
 	}
+
 	/* set the proper round number on the packet */
 	for (int i=0; i<N; i++) {
 		data_pack[i].round_num = 1;
