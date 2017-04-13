@@ -39,9 +39,9 @@ pqtest: pqtest.c pq.o debug.o
 pq.o: pq.c pq.h debug.c debug.h
 	gcc $(CFLAGS) -c pq.c
 
-psmt_test: psmt_test.c psmt.o mcio.o
+psmt_test: psmt_test.c psmt.o mcio.o pq.o debug.o
 	gcc $(CFLAGS) -c psmt_test.c 
-	gcc $(CFLAGS) psmt_test.o psmt.o mcio.o fieldpoly/ff256.o fieldpoly/fieldpoly.o -o psmt_test
+	gcc $(CFLAGS) psmt_test.o psmt.o mcio.o pq.o debug.o fieldpoly/ff256.o fieldpoly/element.o fieldpoly/fieldpoly.o -o psmt_test
 
 debug.o: debug.c debug.h
 	gcc $(CFLAGS) -c debug.c
