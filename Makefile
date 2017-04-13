@@ -51,4 +51,5 @@ clean:
 	rm -f send 
 	rm -f receive
 	rm -f pipes/*
+	rm -f mciotestsend mciotestreceive 
 	make -C fieldpoly clean

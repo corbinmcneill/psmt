@@ -16,6 +16,7 @@ int main() {
 	int* rfds, *wfds;
     rfds = malloc(sizeof(int)*N);
     wfds = malloc(sizeof(int)*N);
+    debug("opening pipes\n");
 	for (i=0; i<N; i++) {
 		char rfilename[FNAME_LEN], wfilename[FNAME_LEN];;
 		snprintf(rfilename,FNAME_LEN,"pipes/pipe_a_%d",i);
@@ -29,13 +30,53 @@ int main() {
 			exit(-1);
 		}
 	}
+    debug("done opening pipes\n");
 
 	debug("sending stuff\n");
     mc_init(rfds, wfds, N);
     trans_packet toSend;
-    toSend.seq_num = 1;
+    toSend.seq_num = 3;
     toSend.round_num = 1;
     toSend.h_vals[1][1] = 42;
+    mc_write(&toSend,3);
+
+    toSend.seq_num = 2;
+    toSend.round_num = 1;
+    toSend.h_vals[1][1] = 9;
+    mc_write(&toSend,3);
+
+    toSend.seq_num = 1;
+    toSend.round_num = 1;
+    toSend.h_vals[1][1] = 5;
+    mc_write(&toSend,3);
+
+toSend.seq_num = 0;
+    toSend.round_num = 1;
+    toSend.h_vals[1][1] = 5;
+    mc_write(&toSend,3);
+
+
+toSend.seq_num = 1;
+    toSend.round_num = 1;
+    toSend.h_vals[1][1] = 5;
+    mc_write(&toSend,3);
+toSend.seq_num = 1;
+    toSend.round_num = 1;
+    toSend.h_vals[1][1] = 5;
+    mc_write(&toSend,3);
+toSend.seq_num = 1;
+    toSend.round_num = 1;
+    toSend.h_vals[1][1] = 5;
+    mc_write(&toSend,3);
+toSend.seq_num = 1;
+    toSend.round_num = 1;
+    toSend.h_vals[1][1] = 5;
+    mc_write(&toSend,3);
+
+
+toSend.seq_num = 500;
+    toSend.round_num = 1;
+    toSend.h_vals[1][1] = 5;
     mc_write(&toSend,3);
     return 0;
 }

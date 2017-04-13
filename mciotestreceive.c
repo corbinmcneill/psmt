@@ -13,15 +13,18 @@
 #define FNAME_LEN 50
 
 int main() {
+    debug("repiping\n");
 	if (system("scripts/repipe") < 0) {
 		printf("repipe error");
 		exit(-1);
 	}
+    debug("done repiping\n");
 
 	int i;
 	int* rfds, *wfds;
     rfds = malloc(sizeof(int)*N);
     wfds = malloc(sizeof(int)*N);
+    debug("opening pipes\n");
 	for (i=0; i<N; i++) {
 		char rfilename[FNAME_LEN], wfilename[FNAME_LEN];;
 		snprintf(rfilename,FNAME_LEN,"pipes/pipe_b_%d",i);
@@ -44,9 +47,9 @@ int main() {
         int wire;
         if (mc_read(&data, &wire)) {
             debug("got packet from wire %d\n", wire);
-            debug("\tSequence #%d\n",data.round_num);
+            debug("\tSequence #%d\n",data.seq_num);
             debug("\tRound #%d\n",data.round_num);
-            debug("\th[1][1] = %d\n", data.h_vals[1][1]);
+            //debug("\th[1][1] = %d\n", data.h_vals[1][1]);
         }
         
     }

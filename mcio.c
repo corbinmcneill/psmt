@@ -16,15 +16,6 @@
 int* wfds;
 int* rfds;
 
-// the first round 1 sequence number that hasn't been read by a given wire
-long* firstseqnotread;
-// the last round 1 sequence number read by a given wire
-long* lastseqread;
-/* recieved[(start_recieved + i) % MAX_MISORDERED] = 1 iff the 
- * (firstseqnotread+i)th sequence has been received */
-int* start_received;
-char** received;
-
 int numwires;
 tppq pq;
 
@@ -35,7 +26,7 @@ pthread_mutex_t pq_lock;
 
 /* function declarations */
 void *listener(void *threadid);
-int markreceived(int seqnum, int wire);
+int markreceivedround1(int seqnum, int wire,long* lastseqread,long* firstseqnotread, int* start_received, char* received); 
 
 int mc_init(int* rfds_in,int* wfds_in, int n){
 
@@ -47,13 +38,6 @@ int mc_init(int* rfds_in,int* wfds_in, int n){
     wfds = wfds_in;
     rfds = rfds_in;
     numwires = n;
-    lastseqread = malloc(sizeof(long)*n);
-    firstseqnotread = calloc(sizeof(long),n);
-    received = calloc(MAX_MISORDERED*sizeof(char), n);
-    start_received = calloc(n,1);
-    for (int i = 0; i < n; i++) {
-        lastseqread[n] = -1;
-    }
 
     // set up the priority queue
     pthread_mutex_init(&pq_lock,NULL);
@@ -92,8 +76,6 @@ int mc_destroy() {
 void finish_cleanup() {
     free(rfds);
     free(wfds);
-    free(firstseqnotread);
-    free(lastseqread);
     pthread_mutex_lock(&pq_lock);
     destroypq(&pq);
     pthread_mutex_destroy(&done);
@@ -138,7 +120,24 @@ void safe_insert(mc_packet* packet) {
 
 //TODO: add epoll
 void* listener(void *threadid) {
+ 
+    // the first round 1 sequence number that hasn't been read by a given wire
+    long* firstseqnotread;
+    // the last round 1 sequence number read by a given wire
+    long* lastseqread;
+    /* recieved[wire*((start_recieved + i) % MAX_MISORDERED)] = 1 iff the 
+     * (firstseqnotread[wire]+i)th sequence has been received */
+    int* start_received;
+    char* received;
     mc_packet* input = malloc(sizeof(mc_packet));
+    lastseqread = malloc(sizeof(long)*numwires);
+    firstseqnotread = calloc(sizeof(long),numwires);
+    received = calloc(MAX_MISORDERED*numwires*sizeof(char),1);
+    start_received = calloc(numwires,sizeof(int));
+    for (int i = 0; i < numwires; i++) {
+        lastseqread[i] = -1;
+    }
+
     int bytesread;
     debug("starting listener\n");
     while(1) {
@@ -152,9 +151,15 @@ void* listener(void *threadid) {
            if (bytesread == sizeof(trans_packet) ) {
                 input->wire = i;
                 debug("listener got packet, sequence %d, round %d\n", input->tp.seq_num, input->tp.round_num);
-                if (markreceived(input->tp.seq_num,i)) {
-                    safe_insert(input);
+                if (input->tp.round_num == 1) {
+                    if (markreceivedround1(input->tp.seq_num,i,lastseqread,firstseqnotread,start_received,received)) {
+                        safe_insert(input);
+                    }
                 }
+                else {
+                    //processpublic(input->tp,i);
+                }
+                    
            }
            else if ((bytesread != 0) && (bytesread != -1 && errno != EAGAIN)){
                debug("Read error, read %d bytes\n",bytesread);
@@ -162,12 +167,19 @@ void* listener(void *threadid) {
 
        }
     }
+    free(input);
+    free(lastseqread);
+    free(firstseqnotread);
+    free(received);
+    free(start_received);
     pthread_exit(NULL);
 }
 /*
  * returns 1 if the packet should be kept and 0 if it should be destroyed.
  */
-int markreceived(int seqnum, int wire) {
+int markreceivedround1(int seqnum, int wire,long* lastseqread,long* firstseqnotread, int* start_received, char* received) {
+    debug("markreceived(%d,%d) called\n", seqnum, wire);
+    debug("firstseqnotread[wire]=%d, lastseqread[wire]=%d\n", firstseqnotread[wire],lastseqread[wire] );
     if (seqnum < firstseqnotread[wire]) {
         return 0;
     } else if (seqnum == firstseqnotread[wire]) {
@@ -176,25 +188,33 @@ int markreceived(int seqnum, int wire) {
         int index;
         for (i = 0; i < lastseqread[wire] - firstseqnotread[wire] ; i++) {
             index =  (i+1+start_received[wire])%MAX_MISORDERED;
-            received[index] = 0;
-            if (!received[index]) {
+            if (!received[wire*index]) {
+                received[wire*index] = 0;
                 break;
             }
-            firstseqnotread[wire] += i;
-            start_received[wire] = index;
+            received[wire*index] = 0;
         }
+        firstseqnotread[wire] += i;
+        start_received[wire] = index;
         if (seqnum > lastseqread[wire]) {
             lastseqread[wire] = seqnum;
         }
         return 1;
     } else if (seqnum < lastseqread[wire]) {
-        received[wire][(seqnum + start_received[wire]) % MAX_MISORDERED] = 1;
+        int index = wire*((seqnum + start_received[wire]) % MAX_MISORDERED);
+        if (received[index] == 1)
+            return 0;
+        received[index] = 1;
         return 1;
     } else if (seqnum == lastseqread[wire]) {
         return 0;
     } else {
         lastseqread[wire] = seqnum;
-        if (lastseqread[wire] > firstseqnotread[wire] + MAX_MISORDERED) {
+        return 1;
+    }
+    debug("sending dummy if %d > %d\n",lastseqread[wire],firstseqnotread[wire] + MAX_MISORDERED);
+    if (lastseqread[wire] > (firstseqnotread[wire] + MAX_MISORDERED)) {
+               debug("sending dummy\n");
                //send back a dummy packet to indicate giving up
                mc_packet dummy;
                dummy.tp.seq_num = firstseqnotread[wire];
@@ -202,12 +222,11 @@ int markreceived(int seqnum, int wire) {
                dummy.tp.aux = 1;
                dummy.wire = wire;
                safe_insert(&dummy);
+               debug("inserted dummy\n");
                //mark the packet as received
-               markreceived(firstseqnotread[wire],wire);
+               markreceivedround1(dummy.tp.seq_num,wire, lastseqread,firstseqnotread,start_received,received);
                return 1;
         }
-        return 1;
-    }
 
 }
        
