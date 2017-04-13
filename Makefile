@@ -50,6 +50,7 @@ clean:
 	rm -f *.o 
 	rm -f send 
 	rm -f receive
+	rm -f psmt_test
 	rm -f pipes/*
 	rm -f mciotestsend mciotestreceive 
 	make -C fieldpoly clean
