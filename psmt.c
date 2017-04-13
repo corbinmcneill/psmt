@@ -46,7 +46,7 @@ void psmt_init() {
 	history = calloc(HISTORY_SIZE, sizeof(history_unit));
 }
 
-int send_char(char secret) {
+void send_char(char secret) {
 
 	/* spin until the buffer is clear enough for us to advance.
 	 * This is a TERRBILE approach and will be fixed during
@@ -148,11 +148,9 @@ int send_char(char secret) {
 	for (int i=0; i<N; i++) {
 		cont_free(data+i);
     }
-
-    return 0;
 }
 
-int send_spin() {
+void *send_spin(void *params) {
 	for (;;) {
 		/* perform public read and determine whether a pad was 
 	 	 * successfully read.*/
@@ -349,7 +347,7 @@ uint8_t retrieve_pad(trans_contents* info, int info_n, int pad_num) {
 		return onetimepad;
 }
 
-int receive_spin() {
+void *receive_spin(void *params) {
 	for (;;) {
 		/* read a trans_pack */
 		trans_packet packet;
