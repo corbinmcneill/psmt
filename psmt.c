@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <errno.h>
 #include <time.h>
+#include <pthread.h>
 
 #include "psmt.h"
 #include "params.h"
@@ -23,6 +24,10 @@ uint8_t retrieve_pad(trans_contents* info, int info_n, int pad_num);
 int receiver_phase1(int wire, trans_packet phase1pack) {
 int receiver_phase3(trans_packet phase3pack) {
 */
+
+/* this share_lock is used to lock all variables shared between spinning
+ * instances and of spins and send_char */
+pthread_mutex_t share_lock;
 
 typedef struct
 {
@@ -44,6 +49,7 @@ unsigned long current_seq = 0;
 
 void psmt_init() {
 	history = calloc(HISTORY_SIZE, sizeof(history_unit));
+	pthread_mutex_init(&share_lock, NULL);
 }
 
 void send_char(char secret) {
@@ -51,9 +57,13 @@ void send_char(char secret) {
 	/* spin until the buffer is clear enough for us to advance.
 	 * This is a TERRBILE approach and will be fixed during
 	 * multithreaded refactoring */
+	pthread_mutex_lock(&share_lock);
 	while(history[current_seq%HISTORY_SIZE].valid) {
+		pthread_mutex_unlock(&share_lock);
 		usleep(1000);
+		pthread_mutex_lock(&share_lock);
 	}
+	pthread_mutex_unlock(&share_lock);
 
     /* ff256 evaluation of a polynomial */
     ff256_t* eval_element;
@@ -132,12 +142,14 @@ void send_char(char secret) {
 	}
 	
 	/* save information for error detection in phase 2 */
+	pthread_mutex_lock(&share_lock);
 	history_unit *history_node = history+(current_seq%HISTORY_SIZE);
 	history_node->packets = data_pack;
 	history_node->pads = pads;
 	history_node->f = f;
 	history_node->secret = secret;
 	history_node->valid = 1;
+	pthread_mutex_unlock(&share_lock);
 
 	/* advance the sequence number for the next send */
 	current_seq += 1;
@@ -166,10 +178,13 @@ void *send_spin(void *params) {
 		unsigned long local_seq = phase2pack.seq_num;
 		unsigned long local_seq_mod = local_seq % HISTORY_SIZE;
 		
+		pthread_mutex_lock(&share_lock);
 		if (history[local_seq_mod].valid) {
+			pthread_mutex_unlock(&share_lock);
 			/* Just drop it. This shouldn't happen often. */
 		}
 		else {
+			pthread_mutex_unlock(&share_lock);
 			trans_packet cipher_packet;
 			memset(&cipher_packet, 0, sizeof(trans_packet));
 			if (phase2pack.h_vals[phase2pack.aux] == 0) {
@@ -190,23 +205,29 @@ void *send_spin(void *params) {
 			 	}
 			 	for (int i=0; i<N; i++) {
 			 		/* check which channels' transmissions were corrupted */
+					pthread_mutex_lock(&share_lock);
 			 		if (memcmp(phase2packs+i,
 			 		    &(history[local_seq_mod].packets[i]), 
 			 		    sizeof(trans_packet))) {
 
 						cipher_packet.c_vals[0][i] = 1; 
 			 		}
+					pthread_mutex_unlock(&share_lock);
 			 	}
 			} 
 			cipher_packet.seq_num = local_seq;
 			cipher_packet.round_num = 3;
 			/* NOTE: make sure history[i].secret is being interpreted as a
 			 * char not an int */
+			pthread_mutex_lock(&share_lock);
 			cipher_packet.aux = history[local_seq_mod].secret ^
 				(history[local_seq_mod].pads[local_seq]).val;
+			pthread_mutex_unlock(&share_lock);
 			mc_write(&cipher_packet, -1);
 		}
+		pthread_mutex_lock(&share_lock);
 		history[local_seq_mod].valid = 0;
+		pthread_mutex_unlock(&share_lock);
 		/* TODO free history block and all it's contents. Note that some of
 		 * the contents are likely currently on the stack so they should be
 		 * moved on to the heap. */
@@ -224,6 +245,7 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 	unsigned long local_seq = phase1pack.seq_num;
 	unsigned long local_seq_mod = local_seq % HISTORY_SIZE;
 
+	pthread_mutex_lock(&share_lock);
 	if (! history[local_seq_mod].valid) {
 		memset(history+local_seq_mod,0,sizeof(history_unit)); 
 	}
@@ -236,8 +258,10 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 	 * returned from mcio, so we will ALWAYS receive the full N
 	 * trans_packets for this sequence. */
 	if (history[local_seq_mod].valid < N) {
+		pthread_mutex_unlock(&share_lock);
 		return 0;
 	}
+	pthread_mutex_unlock(&share_lock);
 
 	trans_contents contents[N];
 	for (int i=0; i<N; i++) {
@@ -248,8 +272,10 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 	int best_pad_failed = !!find_pad_conflicts(best_pad, contents);
 
 	/* store best_pad and best_pad_failed for the next stage */
+	pthread_mutex_lock(&share_lock);
 	history[local_seq_mod].best_pad = best_pad;
 	history[local_seq_mod].best_pad_failed = best_pad_failed;
+	pthread_mutex_unlock(&share_lock);
 
 	if (best_pad_failed) {
 		/* send back censored information */
@@ -290,6 +316,7 @@ int receiver_phase3(trans_packet phase3pack) {
 	trans_contents conts[N];
 
 	int counter;
+	pthread_mutex_lock(&share_lock);
 	if (history[local_seq_mod].best_pad_failed) {
 		/* convert all of our good packets to trans_content */
 		counter = 0;
@@ -310,6 +337,7 @@ int receiver_phase3(trans_packet phase3pack) {
 	/* do polynomial interpolation here to get the y-int of the 
 	 * f polynomial */
 	onetimepad = retrieve_pad(conts, counter, history[local_seq_mod].best_pad);
+	pthread_mutex_unlock(&share_lock);
 		
 	/* At this point we have a padded message and a pad. Just recreate 
 	 * the message */
