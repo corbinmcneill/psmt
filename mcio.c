@@ -113,13 +113,16 @@ int mc_read(trans_packet* data, int* wire) {
 int mc_write(trans_packet* data, int wire) {
    debug("writing packet, sequence %d, round %d, wire %d\n", 
            data->seq_num, data->round_num, wire);
-   int byteswritten = write(wfds[wire], data, sizeof(trans_packet));
-   assert(byteswritten == sizeof(trans_packet));
+   int byteswritten;
    if (wire == -1) {
        for (int i = 0; i < numwires; i++) {
            byteswritten = write(wfds[i], data, sizeof(trans_packet));
            assert(byteswritten == sizeof(trans_packet));
        }
+   }
+   else {
+       byteswritten = write(wfds[wire], data, sizeof(trans_packet));
+       assert(byteswritten == sizeof(trans_packet));
    }
    return 1;
 }

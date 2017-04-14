@@ -49,7 +49,7 @@ int main() {
             debug("got packet from wire %d\n", wire);
             debug("\tSequence #%d\n",data.seq_num);
             debug("\tRound #%d\n",data.round_num);
-            //debug("\th[1][1] = %d\n", data.h_vals[1][1]);
+            debug("\th[1][1] = %d\n", data.h_vals[1][1]);
         }
         
     }

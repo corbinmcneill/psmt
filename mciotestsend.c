@@ -10,10 +10,10 @@
 #include <string.h>
 
 #define FNAME_LEN 50
-
-int main() {
 	int i;
 	int* rfds, *wfds;
+
+int main() {
     rfds = malloc(sizeof(int)*N);
     wfds = malloc(sizeof(int)*N);
     debug("opening pipes\n");
@@ -33,7 +33,19 @@ int main() {
     debug("done opening pipes\n");
 
 	debug("sending stuff\n");
+
     mc_init(rfds, wfds, N);
+    trans_packet tp; 
+    tp.seq_num = 1;
+    tp.round_num = 3;
+    tp.h_vals[1][1] = 42;
+    mc_write(&tp,-1);
+    return 0;
+}
+
+
+
+void testround1() {
     trans_packet toSend;
     toSend.seq_num = 3;
     toSend.round_num = 1;
@@ -73,10 +85,8 @@ toSend.seq_num = 1;
     toSend.h_vals[1][1] = 5;
     mc_write(&toSend,3);
 
-
 toSend.seq_num = 500;
     toSend.round_num = 1;
     toSend.h_vals[1][1] = 5;
     mc_write(&toSend,3);
-    return 0;
 }
