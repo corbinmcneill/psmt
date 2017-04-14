@@ -120,8 +120,8 @@ void send_char(char secret) {
 					((ff256_t*)data[j].h[i]->coeffs[k])->val;
 			}
 			/* evaluate h at N+1 places */
-			for (int k=1; k<N+1; k++) {
-                iter_element->val = k;
+			for (int k=0; k<N; k++) {
+                iter_element->val = k+1;
                 ff256_t *result = (ff256_t*)eval_poly(data[j].h[i], 
                 		(element_t*)iter_element);
                 data_pack[j].c_vals[i][k] = result->val;
@@ -132,13 +132,14 @@ void send_char(char secret) {
 	/* set the proper round number on the packet */
 	for (int i=0; i<N; i++) {
 		data_pack[i].round_num = 1;
+		data_pack[i].seq_num = current_seq;
 	}
 
 	/* send the data_pack's we created */
 	for (int i=0; i<N; i++) {
-		if (mc_write(data_pack+i, i) < 0) {
-			printf("error: mc_write\n");
-		}
+		printf("writing packet %d\n",i);
+		assert((data_pack+i)->round_num == 1);
+		mc_write(data_pack+i, i);
 	}
 	
 	/* save information for error detection in phase 2 */
@@ -158,7 +159,7 @@ void send_char(char secret) {
     free(iter_element);
     free(reference_element);
 	for (int i=0; i<N; i++) {
-		cont_free(data+i);
+		cont_free(data+i, 0);
     }
 }
 
@@ -168,9 +169,12 @@ void *send_spin(void *params) {
 	 	 * successfully read.*/
 		trans_packet phase2pack;
 		int wire;
-		mc_read(&phase2pack, &wire);
+		int amount = mc_read(&phase2pack, &wire);
+		if (amount == 0) {
+			continue;
+		}
 		if (wire != -1) {
-			printf("send_spin error: expected public read\n");
+			printf("send_spin error: expected public read %d\n", wire);
 			exit(1);
 		}
 
@@ -199,7 +203,7 @@ void *send_spin(void *params) {
 			 		 * not there is a mistake in mcio. */
 			 		if (wire != -1) {
 						printf("send_spin error: received non-public "
-						       "read when expecting public read.\n");
+						       "read when expecting public read. %d\n", wire);
 						exit(1);
 			 		}
 			 	}
@@ -250,6 +254,9 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 		memset(history+local_seq_mod,0,sizeof(history_unit)); 
 	}
 
+	if (history[local_seq_mod].valid <= 0) {
+		history[local_seq_mod].packets = calloc(N, sizeof(trans_packet));
+	}
 	history[local_seq_mod].packets[wire] = phase1pack;
 	history[local_seq_mod].valid++;
 
@@ -380,7 +387,9 @@ void *receive_spin(void *params) {
 		/* read a trans_pack */
 		trans_packet packet;
 		int wire;
-		mc_read(&packet, &wire); 
+		if (!mc_read(&packet, &wire)) {
+			continue;
+		}
 
 		/* handle the trans_pack differently depending on 
 		 * the round_num */
@@ -389,8 +398,8 @@ void *receive_spin(void *params) {
 		} else if (packet.round_num == 3) {
 			receiver_phase3(packet);
 		} else {
-			printf("receive_spin error: received packet with invalid"
-		       	   "round number\n");
+			printf("receive_spin error: received packet with invalid "
+		       	   "round number %d\n", packet.round_num);
 			exit(1);
 		}
 	}
@@ -425,13 +434,14 @@ int find_best_pad(trans_contents conts[]) {
  * A conflict exists on wires n and m where n < m iff
  * result & (n*N + m) > 0 */
 int find_pad_conflicts(int pad, trans_contents conts[]) {
-	assert(N*N <= sizeof(int));
+	assert(N*N <= sizeof(int)*8);
 	int toReturn = 0;
 	/*first index though wires*/
 	for (int i=0; i<N; i++) {
 		/*second index though wires*/
 		for (int j=i+1; j<N; j++) {
 			ff256_t x,*y;
+			ff256_init(&x);
 			x.val = i;
 			y = (ff256_t*) eval_poly(conts[j].h[pad], (element_t*) &x);
 			if (conts[i].c[pad][j]->val != y->val) {
@@ -476,14 +486,15 @@ int cont2pack(trans_contents *given, trans_packet *result) {
 
 /* free the ff256_t's and polynomials within a trans_cont and the
  * trans_cont */
-int cont_free(trans_contents *given) {
+int cont_free(trans_contents *given, int freec) {
 	for (int i=0; i<N*T+1; i++) {
 		poly_free(given->h[i]);
-		for (int j=0; j<N; j++) {
-			free(given->c[i][j]);
+		if (freec) {
+			for (int j=0; j<N; j++) {
+				free(given->c[i][j]);
+			}
 		}
 	}
-	free(given);
 	return 0;
 }
 

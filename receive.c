@@ -1,4 +1,3 @@
-#include "psmt.h"
 #include <fcntl.h>
 #include <errno.h>
 #include <stdio.h>
@@ -6,6 +5,10 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "psmt.h"
+#include "mcio.h"
+#include "debug.h"
 
 #define FNAME_LEN 50
 
@@ -37,6 +40,11 @@ int main() {
 		}
 	}
 
+	debug("calling mc_init\n");
+	mc_init(rfds,wfds,N);
+	psmt_init();
+
+	receive_spin(NULL);
 
 	return 0;
 }

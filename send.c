@@ -8,6 +8,7 @@
 #include <pthread.h>
 
 #include "psmt.h"
+#include "mcio.h"
 
 char *message = "test message\n"; 
 unsigned int message_n = 13;
@@ -28,7 +29,7 @@ int main() {
 			exit(-1);
 		}
 	}
-
+	mc_init(rfds, wfds, N);
 	psmt_init();
 
 	/* Note: with proper synchronization, this code could
@@ -43,11 +44,14 @@ int main() {
 	}
 
 	for (unsigned int i=0; i<message_n; i++) {
+		printf("%c\n", message[i]);
 		send_char(message[i]);
 	}
 	
 	pthread_cancel(send_spin_thread);
 	pthread_attr_destroy(&attr);
+
+	mc_destroy();
 
 	return 0;
 }
