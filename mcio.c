@@ -15,6 +15,7 @@
 // the maximum number of out of order packets a good wire can send
 #define MAX_MISORDERED 100
 
+char initialized = 0;
 int* wfds;
 int* rfds;
 
@@ -76,12 +77,13 @@ int mc_init(int* rfds_in,int* wfds_in, int n){
     int retval  = pthread_create(&threads[t], NULL, listener, (void*) t); 
     debug("listener thread was created. retval: %d\n", retval);
     assert(!retval);
-
+    initialized = 1;
     return 0;
         
 }
 
 int mc_destroy() {
+    assert(initialized);
     pthread_mutex_unlock(&done);
     // TODO fix return?
     return 0;
@@ -101,6 +103,7 @@ void finish_cleanup() {
 
 
 int mc_read(trans_packet* data, int* wire) {
+    assert(initialized);
     if (pq.size == 0){
         return 0;
     }
@@ -113,6 +116,7 @@ int mc_read(trans_packet* data, int* wire) {
 }
 
 int mc_write(trans_packet* data, int wire) {
+    assert(initialized);
    debug("writing packet, sequence %d, round %d, wire %d\n", 
            data->seq_num, data->round_num, wire);
    int byteswritten;
