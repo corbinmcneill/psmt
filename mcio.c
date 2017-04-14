@@ -42,6 +42,7 @@ void process_public(trans_packet tp, int wire, p_tp* public_cache, int start_pc,
 
 
 int mc_init(int* rfds_in,int* wfds_in, int n){
+    debug("mc_init was called\n");
 
     // set up the communication for cleanup
     pthread_mutex_init(&done,NULL);
