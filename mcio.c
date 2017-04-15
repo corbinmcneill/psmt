@@ -75,6 +75,7 @@ int mc_init(int* rfds_in,int* wfds_in, int n){
     long t = 0;
     pthread_t threads[MAX_THREADS];
     int retval  = pthread_create(&threads[t], NULL, listener, (void*) t); 
+    debug("listener thread was created. retval: %d\n", retval);
     assert(!retval);
     initialized = 1;
     return 0;
@@ -141,6 +142,7 @@ void safe_insert(mc_packet* packet) {
 
 //TODO: add epoll
 void* listener(void *threadid) {
+	debug("listener was called\n");
  
     // the first round 1 sequence number that hasn't been read by a given wire
     long* firstseqnotread;

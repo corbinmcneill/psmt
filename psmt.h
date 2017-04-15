@@ -48,7 +48,7 @@ void *receive_spin(void *params);
 
 /* these don't actually need to be publically accessible but
  * we want to unit test them */
-int cont_free(trans_contents *given);
+int cont_free(trans_contents *given, int freec);
 int pack2cont(trans_packet *given, trans_contents *result);
 int cont2pack(trans_contents *given, trans_packet *result);
 int find_best_pad(trans_contents conts[]);
