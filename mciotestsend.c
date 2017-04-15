@@ -40,6 +40,8 @@ int main() {
     tp.round_num = 3;
     tp.h_vals[1][1] = 42;
     mc_write(&tp,-1);
+    mc_write(&tp,-1);
+    mc_write(&tp,-1);
     return 0;
 }
 

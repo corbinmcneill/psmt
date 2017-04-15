@@ -305,6 +305,12 @@ void process_public(trans_packet tp, int wire, p_tp* public_cache, int start_pc,
     }
 
     int start_index = (offset + start_pc)%MAX_MISORDERED;
+    //make sure we aren't done with this sequence
+    if (public_cache[start_index].row_finished) {
+        debug("tossing duplicate sequence\n");
+        return;
+    }
+
     for (int i = 0; i < numwires; i++) {
         p_tp* curr = &public_cache[(start_index+i)%MAX_MISORDERED];
         // if this voting block is empty 
