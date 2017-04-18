@@ -6,9 +6,11 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #include "psmt.h"
 #include "mcio.h"
+#include "debug.h"
 
 char *message = "test message\n"; 
 unsigned int message_n = 13;
@@ -44,13 +46,14 @@ int main() {
 	}
 
 	for (unsigned int i=0; i<message_n; i++) {
-		printf("%c\n", message[i]);
+		debug("%c\n", message[i]);
 		send_char(message[i]);
 	}
 	
+	sleep(5);
+
 	pthread_cancel(send_spin_thread);
 	pthread_attr_destroy(&attr);
-
 	mc_destroy();
 
 	return 0;
