@@ -13,6 +13,7 @@
 #include "fieldpoly/fieldpoly.h"
 #include "fieldpoly/ff256.h"
 #include "mcio.h"
+#include "debug.h"
 
 /*
 int cont_free(trans_contents *given);
@@ -250,13 +251,10 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 	unsigned long local_seq_mod = local_seq % HISTORY_SIZE;
 
 	pthread_mutex_lock(&share_lock);
-	if (! history[local_seq_mod].valid) {
-		memset(history+local_seq_mod,0,sizeof(history_unit)); 
-	}
-
 	if (history[local_seq_mod].valid <= 0) {
 		history[local_seq_mod].packets = calloc(N, sizeof(trans_packet));
 	}
+
 	history[local_seq_mod].packets[wire] = phase1pack;
 	history[local_seq_mod].valid++;
 
@@ -286,19 +284,17 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 
 	if (best_pad_failed) {
 		/* send back censored information */
-		for (int i=0; i<N; i++) {
-			/* build the censored packet */
-			trans_packet phase1trans_censored;
-			phase1trans_censored = phase1pack;
-			phase1trans_censored.round_num = 2;
-			phase1trans_censored.aux = best_pad;
-			memset(phase1trans_censored.h_vals[best_pad], 0,
-			       sizeof(uint8_t) * (T+1)); 
-			memset(phase1trans_censored.c_vals[best_pad], 0,
-			       sizeof(uint8_t) * (N)); 
-			/* send the censored packet */
-			mc_write(&phase1trans_censored, -1);
-		}
+		/* build the censored packet */
+		trans_packet phase1trans_censored;
+		phase1trans_censored = phase1pack;
+		phase1trans_censored.round_num = 2;
+		phase1trans_censored.aux = best_pad;
+		memset(phase1trans_censored.h_vals[best_pad], 0,
+			   sizeof(uint8_t) * (T+1)); 
+		memset(phase1trans_censored.c_vals[best_pad], 0,
+			   sizeof(uint8_t) * (N)); 
+		/* send the censored packet */
+		mc_write(&phase1trans_censored, -1);
 	} else {
 		/* send back OK, best_pad */
 		trans_packet phase2ok;
@@ -349,7 +345,7 @@ int receiver_phase3(trans_packet phase3pack) {
 	/* At this point we have a padded message and a pad. Just recreate 
 	 * the message */
 	char plaintext = ciphertext ^ onetimepad;
-	printf("%c", plaintext);
+	debug("RECEIVED: %hhd\n", plaintext);
 
 	return 0;
 }
@@ -461,7 +457,7 @@ int pack2cont(trans_packet *given, trans_contents *result) {
 	for (int i=0; i<N*T+1; i++) {
 		result->h[i] = poly_init(T+1, (element_t*) &ref);
 		for (int j=0; j<T+1; j++) 
-			result->h[i]->coeffs[j] = (element_t*) &(given->h_vals[i][j]);
+			((ff256_t*)(result->h[i]->coeffs[j]))->val = given->h_vals[i][j];
 		for (int j=0; j<N; j++) {
 			ff256_t *c_ff256 = (ff256_t*) malloc(sizeof(ff256_t));
 			ff256_init(c_ff256);
