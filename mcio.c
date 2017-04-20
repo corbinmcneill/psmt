@@ -10,7 +10,7 @@
 #include "debug.h"
 #include "params.h"
 
-#define MAX_BUF 1000
+#define MAX_BUF 100000
 #define MAX_THREADS 8
 // the maximum number of out of order packets a good wire can send
 #define MAX_MISORDERED 100
@@ -112,13 +112,13 @@ int mc_read(trans_packet* data, int* wire) {
     pthread_mutex_unlock(&pq_lock);
     *data = received_packet.tp;
     *wire = received_packet.wire;
+    debug("mc_read returning, sequence %d, round %d, wire %d\n", data->seq_num, data->round_num, *wire);
     return 1;
 }
 
 int mc_write(trans_packet* data, int wire) {
     assert(initialized);
-   debug("writing packet, sequence %d, round %d, wire %d\n", 
-           data->seq_num, data->round_num, wire);
+   debug("writing packet, sequence %d, round %d, wire %d\n",     data->seq_num, data->round_num, wire);
    int byteswritten;
    if (wire == -1) {
        for (int i = 0; i < numwires; i++) {

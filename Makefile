@@ -2,7 +2,8 @@ CFLAGS= -pthread -ggdb -Wall -Wextra -std=gnu11 -Wno-unused-variable -Wno-unused
 
 .PHONY: all fieldpoly clean mc
 
-all: send receive fieldpoly
+all: send receive fieldpoly 
+
 
 mc: mciotestreceive mciotestsend
 
