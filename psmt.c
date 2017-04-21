@@ -91,12 +91,12 @@ void send_char(char secret) {
 	trans_packet *data_pack = calloc(N, sizeof(trans_packet));
 
 	/* This iterates over each pad */
-	for (int i=0; i<N*T+1; i++) {
+	for (int pad=0; pad<N*T+1; pad++) {
         /* initialize the polynomial with random values */
-		f[i] = rand_poly(T, (element_t*)reference_element);
+		f[pad] = rand_poly(T, (element_t*)reference_element);
         
 		/* initialize and populate the pads array */
-		assign((element_t*)(pads+i), f[i]->coeffs[0]);
+		assign((element_t*)(pads+pad), f[pad]->coeffs[0]);
 
 		/* Iterate over each channel. For each channel, use the evaluation 
 		 * of f at a unique point to designate the y-intercept of that h poly.*/
@@ -104,8 +104,8 @@ void send_char(char secret) {
             /* pick x */
             iter_element->val = j+1;
             /* calculate y */
-            eval_element = (ff256_t*) eval_poly(f[i],(element_t*) iter_element);
-			data[j].h[i] = rand_poly_intercept(T, (element_t*) eval_element);
+            eval_element = (ff256_t*) eval_poly(f[pad],(element_t*) iter_element);
+			data[j].h[pad] = rand_poly_intercept(T, (element_t*) eval_element);
 
             free(eval_element);
 		}
@@ -117,15 +117,16 @@ void send_char(char secret) {
 			data_pack[j].round_num = 1;
 			/* iterate over the coefficients of each h poly */
 			for (int k=0; k<T+1; k++) { 
-				data_pack[j].h_vals[i][k] = 
-					((ff256_t*)data[j].h[i]->coeffs[k])->val;
+				data_pack[j].h_vals[pad][k] = 
+					((ff256_t*)data[j].h[pad]->coeffs[k])->val;
 			}
 			/* evaluate h at N+1 places */
 			for (int k=0; k<N; k++) {
                 iter_element->val = k+1;
-                ff256_t *result = (ff256_t*)eval_poly(data[j].h[i], 
+                ff256_t *result = (ff256_t*)eval_poly(data[j].h[pad], 
                 		(element_t*)iter_element);
-                data_pack[j].c_vals[i][k] = result->val;
+                data_pack[k].c_vals[pad][j] = result->val;
+               // debug("pad #%d, conts[%d].c[%d][%d]->val=%hhu == (conts[%d].h[%d] evaluated at %d)->val=%hhu\n", pad, j, pad, k,data_pack[j].c_vals[pad][k], j, pad,k+1, result->val);
 			}
 		}
 	}
@@ -232,7 +233,7 @@ void *send_spin(void *params) {
 				(history[local_seq_mod].pads[best_pad]).val;
 			pthread_mutex_unlock(&share_lock);
 			mc_write(&cipher_packet, -1);
-            debug("phase3: secret=0x%hhx, pad=0x%hhx, aux=secret^pad=0x%hhx\n",history[local_seq_mod].secret,(history[local_seq_mod].pads[local_seq]).val,cipher_packet.aux);
+            //debug("phase3: secret=0x%hhx, pad=0x%hhx, aux=secret^pad=0x%hhx\n",history[local_seq_mod].secret,(history[local_seq_mod].pads[local_seq]).val,cipher_packet.aux);
 		}
 		pthread_mutex_lock(&share_lock);
 		history[local_seq_mod].valid = 0;
@@ -459,10 +460,11 @@ int find_pad_conflicts(int pad, trans_contents conts[]) {
 		for (int j=i+1; j<N; j++) {
 			ff256_t x,*y;
 			ff256_init(&x);
-			x.val = i;
+			x.val = i+1;
 			y = (ff256_t*) eval_poly(conts[j].h[pad], (element_t*) &x);
 			if (conts[i].c[pad][j]->val != y->val) {
 				toReturn |= 1<<((i*N)+j);
+                debug("found pad conflict on pad #%d, conts[%d].c[%d][%d]->val=%hhu != (conts[%d].h[%d] evaluated at %d)->val=%hhu\n", pad, i, pad, j,conts[i].c[pad][j]->val, j, pad,i+1, y->val);
 			}
 		}
 	}

@@ -13,7 +13,7 @@
 #define MAX_BUF 100000
 #define MAX_THREADS 8
 // the maximum number of out of order packets a good wire can send
-#define MAX_MISORDERED 100
+#define MAX_MISORDERED 4
 
 char initialized = 0;
 int* wfds;
@@ -38,7 +38,7 @@ typedef struct public_trans_packet{
 /* function declarations */
 void *listener(void *threadid);
 int markreceivedround1(int seqnum, int wire,long* lastseqread,long* firstseqnotread, int* start_received, char* received); 
-void process_public(trans_packet tp, int wire, p_tp* public_cache, int start_pc, unsigned long firstpublicnotfinished);
+void process_public(trans_packet tp, int wire, p_tp* public_cache, int *start_pc, unsigned long *firstpublicnotfinished);
 
 
 
@@ -195,7 +195,7 @@ void* listener(void *threadid) {
                     }
                 }
                 else {
-                    process_public(input->tp,i,public_cache,start_pc,firstpublicnotfinished);
+                    process_public(input->tp,i,public_cache,&start_pc,&firstpublicnotfinished);
                 }
                     
            }
@@ -297,16 +297,17 @@ void cleanuprow(p_tp* public_cache, int row) {
 
 
 
-void process_public(trans_packet tp, int wire, p_tp* public_cache, int start_pc, unsigned long firstpublicnotfinished){
+void process_public(trans_packet tp, int wire, p_tp* public_cache, int* start_pc, unsigned long *firstpublicnotfinished){
     mc_packet temp;
     temp.wire = -1;
-    int offset = tp.seq_num - firstpublicnotfinished;
+    int offset = tp.seq_num - *firstpublicnotfinished;
     // if it is out of range ignore it
     if(offset < 0|| offset > MAX_MISORDERED) {
+       debug("ignoring packet since tp.seq_num=%d - firstpublicnotfinished=%d > MAX_MISORDERED=%d\n",tp.seq_num, *firstpublicnotfinished,MAX_MISORDERED); 
        return; 
     }
 
-    int start_index = (offset + start_pc)%MAX_MISORDERED;
+    int start_index = (offset + *start_pc)%MAX_MISORDERED;
     //make sure we aren't done with this sequence
     if (public_cache[start_index].row_finished) {
         debug("tossing duplicate sequence\n");
@@ -339,19 +340,33 @@ void process_public(trans_packet tp, int wire, p_tp* public_cache, int start_pc,
                     safe_insert(&temp);
                     cleanuprow(public_cache,start_index);
                     // if we are the firstpublicnotfinished, find a new one
-                    if (firstpublicnotfinished == tp.seq_num) {
+                    if (*firstpublicnotfinished == tp.seq_num) {
+                        debug("finished sequence %d, finding new firstpublicnotfinished\n", tp.seq_num);
                         int j;
                         int index;
-                        
+                        char changed_fpnf = 0; 
+                        // set this row to not finished
+                        public_cache[*start_pc].row_finished = 0;
+
                         for (j = 1; j < MAX_MISORDERED; j++) {
-                            index = (start_pc + j*numwires)%MAX_MISORDERED;
+                            index = (*start_pc + j*numwires)%MAX_MISORDERED;
+                            debug("index=%d, public_cache[index].row_finished=%hhd\n", index, public_cache[index].row_finished);
                             if (!public_cache[index].row_finished){
                                 public_cache[index].row_finished = 0;
-                                start_pc = index;
+                                *start_pc = index;
+                                *firstpublicnotfinished += j;
+                                changed_fpnf =1;
                                 break;
                             }
                             public_cache[index].row_finished = 0;
                         }
+                        if (!changed_fpnf) {
+                            debug("fpnf was not change in for loop, this should almost never happen\n");
+                            *firstpublicnotfinished += MAX_MISORDERED; 
+                        }
+
+                        debug("selected %d as the new firstpublicnotfinished\n",*firstpublicnotfinished);
+                        
                     }
                 }
                 break;

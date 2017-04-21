@@ -47,7 +47,6 @@ int main() {
 
     //find message_n
     for (message_n = 0; message[message_n] != 0; message_n++){}
-    printf("message_n: %d:",message_n);
 
 	for (unsigned int i=0; i<message_n; i++) {
 		debug("%c\n", message[i]);
