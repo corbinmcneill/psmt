@@ -18,10 +18,16 @@ unsigned int message_n;
 int main() {
 	int i;
 	int rfds[N], wfds[N];
+    if (system("scripts/sen_repipe cslab24") < 0) {
+             printf("repipe error");
+             exit(-1);
+    }
+
 	for (i=0; i<N; i++) {
 		char rfilename[FNAME_LEN], wfilename[FNAME_LEN];;
-		snprintf(rfilename,FNAME_LEN,"pipes/pipe_a_%d",i);
-		snprintf(wfilename,FNAME_LEN,"pipes/pipe_b_%d",i);
+		snprintf(rfilename,FNAME_LEN,"/tmp/pipes/pipe_a_%d",i);
+		snprintf(wfilename,FNAME_LEN,"/tmp/pipes/pipe_b_%d",i);
+        debug("opening pipes\n");
 		if ((rfds[i] = open(rfilename,O_RDONLY)) < 0) {
 			printf("send.c: read open fail");
 			exit(-1);

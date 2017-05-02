@@ -47,10 +47,20 @@ history_unit *history;
 
 /* The next sequence number to use for a new transmission */
 unsigned long current_seq = 0; 
-
+/* the received message */
+char* received_message;
+/*1 if a spot in received_message has been filled */
+char* received_char;
+/* we have print every char in received_message before not_printed */
+unsigned int start_not_printed;
+unsigned int stop_not_printed;
 void psmt_init() {
 	history = calloc(HISTORY_SIZE, sizeof(history_unit));
 	pthread_mutex_init(&share_lock, NULL);
+    received_message = calloc(1,MAX_MESSAGE);
+    received_char = calloc(1,MAX_MESSAGE);
+    start_not_printed = 0;
+    stop_not_printed = 0;
 }
 
 void send_char(char secret) {
@@ -324,6 +334,16 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 	} 
 	return 0;
 }
+void print() {
+    for (;received_char[stop_not_printed] == 1; stop_not_printed++){}
+    if (start_not_printed != stop_not_printed) {
+        write(1, (received_message + start_not_printed), stop_not_printed - start_not_printed);
+        start_not_printed = stop_not_printed;
+    }
+}
+
+
+
 
 int receiver_phase3(trans_packet phase3pack) {
 
@@ -366,10 +386,14 @@ int receiver_phase3(trans_packet phase3pack) {
 	 * the message */
 	char plaintext = ciphertext ^ onetimepad;
     debug("phase3: ciphertext=0x%hhx, onetimepad=0x%hhx\n",ciphertext,onetimepad);
-	printf("RECEIVED: %c\n", plaintext);
-
+    debug("WE GOT THE MESSAGE %c, sequence=%d\n", plaintext,phase3pack.seq_num);
+    assert(phase3pack.seq_num < MAX_MESSAGE);
+    received_message[phase3pack.seq_num] = plaintext;
+    received_char[phase3pack.seq_num] =  1;
+    print();
 	return 0;
 }
+
 
 /* retrieve the pad designated by pad_num. */
 uint8_t retrieve_pad(trans_contents* info, int info_n, int pad_num) {

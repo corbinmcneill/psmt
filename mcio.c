@@ -10,11 +10,6 @@
 #include "debug.h"
 #include "params.h"
 
-#define MAX_BUF 100000
-#define MAX_THREADS 8
-// the maximum number of out of order packets a good wire can send
-#define MAX_MISORDERED 4
-
 char initialized = 0;
 int* wfds;
 int* rfds;
@@ -298,50 +293,64 @@ void cleanuprow(p_tp* public_cache, int row) {
 
 
 void process_public(trans_packet tp, int wire, p_tp* public_cache, int* start_pc, unsigned long *firstpublicnotfinished){
+    assert(*start_pc % numwires == 0);
+    debug("process_public: called on sequence %d, wire %d, fpnf=%d\n",tp.seq_num , wire, *firstpublicnotfinished);
     mc_packet temp;
     temp.wire = -1;
     int offset = tp.seq_num - *firstpublicnotfinished;
     // if it is out of range ignore it
     if(offset < 0|| offset > MAX_MISORDERED) {
-       debug("ignoring packet since tp.seq_num=%d - firstpublicnotfinished=%d > MAX_MISORDERED=%d\n",tp.seq_num, *firstpublicnotfinished,MAX_MISORDERED); 
+       debug("process_public: ignoring packet since ! (0 < tp.seq_num=%d - firstpublicnotfinished=%d < MAX_MISORDERED=%d\n",tp.seq_num, *firstpublicnotfinished,MAX_MISORDERED); 
        return; 
     }
 
-    int start_index = (offset + *start_pc)%MAX_MISORDERED;
+    int start_index = (offset*numwires + *start_pc)%MAX_MISORDERED;
+    assert(start_index % numwires == 0);
     //make sure we aren't done with this sequence
     if (public_cache[start_index].row_finished) {
-        debug("tossing duplicate sequence\n");
+        debug("process_public: tossing duplicate sequence\n");
         return;
     }
 
     for (int i = 0; i < numwires; i++) {
+        debug("process_public: LOOKING AT VOTING BLOCK %d\n",i);
         p_tp* curr = &public_cache[(start_index+i)%MAX_MISORDERED];
         // if this voting block is empty 
         if (!curr->not_empty) {
+            debug("process_public: initializing voting block %d for wire %d, sequence %d, index %d\n", i,wire, tp.seq_num, (start_index+i)%MAX_MISORDERED);
             curr->not_empty = 1;
             curr->votes = 1;
             curr->tp = tp;
             curr->already_voted[wire] =1;
             break;
         } else {
+            debug("process_public: voting block %d for sequence %d already initialized checking if it matches wire %d, index %d\n",i, tp.seq_num, wire, (start_index+i)%MAX_MISORDERED);
+
             // if the packet matches one already in the array
             if (!memcmp(&(curr->tp), &tp, sizeof(trans_packet))){
+                debug("process_public: found match between wire %d and voting block %d, sequence %d\n", wire, i,tp.seq_num);
                 // the wire has already voted, drop the packet
                 if (curr->already_voted[wire]) {
+                    debug("process_public: wire %d sequence %d already voted, returning\n", i, tp.seq_num);
                     return;
                 }
                 // cast a vote
                 curr->votes++;
                 curr->already_voted[wire] = 1;
+                debug("process_public: wire %d casted vote for block %d, sequence %d\n",wire, i, tp.seq_num);
                 // see if we have enough votes
                 if (curr->votes > T) {
+                    debug("process_public: block %d, sequence %d, has enought votes, finishing\n",i, tp.seq_num);
                     // if we have enough votes, insert the trans_packet
                     temp.tp = tp;  
                     safe_insert(&temp);
                     cleanuprow(public_cache,start_index);
+                    //TODO maybe change back
+                    public_cache[*start_pc].row_finished = 1;
+
                     // if we are the firstpublicnotfinished, find a new one
                     if (*firstpublicnotfinished == tp.seq_num) {
-                        debug("finished sequence %d, finding new firstpublicnotfinished\n", tp.seq_num);
+                        debug("process_public: finished sequence %d, finding new firstpublicnotfinished\n", tp.seq_num);
                         int j;
                         int index;
                         char changed_fpnf = 0; 
@@ -350,24 +359,31 @@ void process_public(trans_packet tp, int wire, p_tp* public_cache, int* start_pc
 
                         for (j = 1; j < MAX_MISORDERED; j++) {
                             index = (*start_pc + j*numwires)%MAX_MISORDERED;
-                            debug("index=%d, public_cache[index].row_finished=%hhd\n", index, public_cache[index].row_finished);
+                            debug("process_public: index=%d, public_cache[index].row_finished=%hhd\n", index, public_cache[index].row_finished);
                             if (!public_cache[index].row_finished){
                                 public_cache[index].row_finished = 0;
                                 *start_pc = index;
                                 *firstpublicnotfinished += j;
                                 changed_fpnf =1;
+                                assert(*start_pc % numwires == 0);
                                 break;
                             }
                             public_cache[index].row_finished = 0;
                         }
+                        assert(*start_pc % numwires == 0);
                         if (!changed_fpnf) {
-                            debug("fpnf was not change in for loop, this should almost never happen\n");
+                            debug("process_public: fpnf was not changed in for loop, this should almost never happen\n");
                             *firstpublicnotfinished += MAX_MISORDERED; 
                         }
 
-                        debug("selected %d as the new firstpublicnotfinished\n",*firstpublicnotfinished);
+                        debug("process_public: finished sequence %d, selected %d as the new firstpublicnotfinished, startpc=%d\n",tp.seq_num, *firstpublicnotfinished, *start_pc);
                         
                     }
+                    else {
+                        debug("process_public: finished sequence %d, don't need to find a new first public not finished\n", tp.seq_num);
+                    }
+                    assert(*start_pc % numwires == 0);
+
                 }
                 break;
             }

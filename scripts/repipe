@@ -3,7 +3,7 @@ rm -f pipes/*
 mkdir -p pipes
 for i in {0..4}
 do
-	mkfifo "pipes/pipe_a_$i"
-	mkfifo "pipes/pipe_b_$i"
+    socat PIPE:"pipes/pipe_a_$i" UDP:$1:$((25565+i))
+	socat PIPE:"pipes/pipe_b_$i" UDP:$1:$((25565+i))
 done
 
