@@ -1,0 +1,12 @@
+#!/bin/bash
+rm -f /tmp/pipes/*
+mkdir -p /tmp/pipes
+for i in {0..4}
+do
+    socat -u UDP-RECV:$((25565+i)) PIPE:"/tmp/pipes/pipe_a_$i" & 
+    pipes="$pipes $!"
+	socat -u PIPE:"/tmp/pipes/pipe_b_$i" UDP-SENDTO:$1:$((25565+i)) &
+    pipes="$pipes $!"
+done
+sleep 1
+#~/git/psmt/scripts/killpipes.sh "\"$pipes\"" &

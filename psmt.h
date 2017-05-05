@@ -42,6 +42,7 @@ typedef struct
 /* these are the publically accessible methods for interfacing
  * with PSMT */
 void psmt_init();
+void psmt_destroy();
 void send_char(char secret);
 void *send_spin(void *params);
 void *receive_spin(void *params);

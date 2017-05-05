@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "psmt.h"
 #include "mcio.h"
@@ -51,6 +52,9 @@ int main() {
 	psmt_init();
     char* message;
 	receive_spin(NULL);
-
+    debug("ending receive\n");
+    sleep(1);
+    psmt_destroy();
+    mc_destroy();
 	return 0;
 }

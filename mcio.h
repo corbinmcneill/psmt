@@ -37,11 +37,12 @@ int mc_init(int* fds, int* wfds, int n);
  *                trans_packet
  * wire - the wire number the trans_packet was recieved on. 
  *
- * returns 1 on read, 0 on no data, and -1 on error
+ * returns 1 on read, 0 on no data, -1 on error,and 4 on end of transmission
  */
 
 int mc_read(trans_packet* data, int* wire);
 
+unsigned int mc_fpnf();
 /*
  * write -
  * Sends a trans_packet over the specified wire. 

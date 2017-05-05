@@ -62,6 +62,12 @@ void psmt_init() {
     start_not_printed = 0;
     stop_not_printed = 0;
 }
+void psmt_destroy() {
+    free(history);
+    free(received_message);
+    free(received_char);
+}
+
 
 void send_char(char secret) {
 
@@ -136,7 +142,7 @@ void send_char(char secret) {
                 ff256_t *result = (ff256_t*)eval_poly(data[j].h[pad], 
                 		(element_t*)iter_element);
                 data_pack[k].c_vals[pad][j] = result->val;
-               // debug("pad #%d, conts[%d].c[%d][%d]->val=%hhu == (conts[%d].h[%d] evaluated at %d)->val=%hhu\n", pad, j, pad, k,data_pack[j].c_vals[pad][k], j, pad,k+1, result->val);
+               // //debug("pad #%d, conts[%d].c[%d][%d]->val=%hhu == (conts[%d].h[%d] evaluated at %d)->val=%hhu\n", pad, j, pad, k,data_pack[j].c_vals[pad][k], j, pad,k+1, result->val);
 			}
 		}
 	}
@@ -149,7 +155,7 @@ void send_char(char secret) {
 
 	/* send the data_pack's we created */
 	for (int i=0; i<N; i++) {
-		debug("writing packet %d\n",i);
+		//debug("writing packet %d\n",i);
 		assert((data_pack+i)->round_num == 1);
 		mc_write(data_pack+i, i);
 	}
@@ -198,7 +204,7 @@ void *send_spin(void *params) {
 		if (!history[local_seq_mod].valid) {
 			pthread_mutex_unlock(&share_lock);
 			/* Just drop it. This shouldn't happen often. */
-            debug("dropping packet in send_spin, this shouldn't happen often\n");
+            //debug("dropping packet in send_spin, this shouldn't happen often\n");
 		}
 		else {
 			pthread_mutex_unlock(&share_lock);
@@ -243,7 +249,7 @@ void *send_spin(void *params) {
 				(history[local_seq_mod].pads[best_pad]).val;
 			pthread_mutex_unlock(&share_lock);
 			mc_write(&cipher_packet, -1);
-            //debug("phase3: secret=0x%hhx, pad=0x%hhx, aux=secret^pad=0x%hhx\n",history[local_seq_mod].secret,(history[local_seq_mod].pads[local_seq]).val,cipher_packet.aux);
+            ////debug("phase3: secret=0x%hhx, pad=0x%hhx, aux=secret^pad=0x%hhx\n",history[local_seq_mod].secret,(history[local_seq_mod].pads[local_seq]).val,cipher_packet.aux);
 		}
 		pthread_mutex_lock(&share_lock);
 		history[local_seq_mod].valid = 0;
@@ -260,38 +266,38 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 		printf("receiver_phase1 error: invalid wire number\n");
 		exit(1);
 	} 
-    debug("phase1: starting receiver phase 1, sequence %d, wire %d\n", phase1pack.seq_num, wire);
+    //debug("phase1: starting receiver phase 1, sequence %d, wire %d\n", phase1pack.seq_num, wire);
 
 	/* these values will be used repeatedly */
 	unsigned long local_seq = phase1pack.seq_num;
 	unsigned long local_seq_mod = local_seq % HISTORY_SIZE;
-    debug("phase1: local_seq=%d, local_seq_mod=%d\n", local_seq, local_seq_mod);
+    //debug("phase1: local_seq=%d, local_seq_mod=%d\n", local_seq, local_seq_mod);
 
-    debug("phase1: locking history lock\n");
+    //debug("phase1: locking history lock\n");
 	pthread_mutex_lock(&share_lock);
 	if (history[local_seq_mod].valid <= 0) {
-        debug("phase1: allocating space for history[local_seq_mod].packets\n");
+        //debug("phase1: allocating space for history[local_seq_mod].packets\n");
 		history[local_seq_mod].packets = calloc(N, sizeof(trans_packet));
 	}
 
     
 	history[local_seq_mod].packets[wire] = phase1pack;
 	history[local_seq_mod].valid++;
-    debug("phase1: saved packet to history and incremented valid to %d\n", history[local_seq_mod].valid);
+    //debug("phase1: saved packet to history and incremented valid to %d\n", history[local_seq_mod].valid);
 
 	/* wait until we have all the packets for a sequence and then
 	 * process it. Recall that, at timeout, dummy packets will be
 	 * returned from mcio, so we will ALWAYS receive the full N
 	 * trans_packets for this sequence. */
 	if (history[local_seq_mod].valid < N) {
-        debug("phase1: unlocking history and returning since history[local_seq_mod].valid=%d < N=%d\n", history[local_seq_mod].valid, N); 
+        //debug("phase1: unlocking history and returning since history[local_seq_mod].valid=%d < N=%d\n", history[local_seq_mod].valid, N); 
 		pthread_mutex_unlock(&share_lock);
 		return 0;
 	}
-    debug("phase1: unlocking history and processing the phase\n");
+    //debug("phase1: unlocking history and processing the phase\n");
 	pthread_mutex_unlock(&share_lock);
 
-    debug("phase1: calling pack2cont on all packets\n");
+    //debug("phase1: calling pack2cont on all packets\n");
 	trans_contents contents[N];
 	for (int i=0; i<N; i++) {
 		pack2cont((history[local_seq_mod].packets)+i, contents+i);
@@ -299,7 +305,7 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 
 	int best_pad = find_best_pad(contents);
 	int best_pad_failed = !!find_pad_conflicts(best_pad, contents);
-    debug("phase1: best_pad=%d, best_pad_failed=%d\n", best_pad,best_pad_failed);
+    //debug("phase1: best_pad=%d, best_pad_failed=%d\n", best_pad,best_pad_failed);
 
   
 	/* store best_pad and best_pad_failed for the next stage */
@@ -309,7 +315,7 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 	pthread_mutex_unlock(&share_lock);
 
 	if (best_pad_failed) {
-        debug("phase1: best pad failed\n");
+        //debug("phase1: best pad failed\n");
 		/* send back censored information */
 		/* build the censored packet */
 		trans_packet phase1trans_censored;
@@ -323,28 +329,41 @@ int receiver_phase1(int wire, trans_packet phase1pack) {
 		/* send the censored packet */
 		mc_write(&phase1trans_censored, -1);
 	} else {
-        debug("phase1: best pad didn't fail\n");
+        //debug("phase1: best pad didn't fail\n");
 		/* send back OK, best_pad */
-		trans_packet phase2ok;
-		phase2ok.seq_num = local_seq;
-		phase2ok.round_num = 2;
-		phase2ok.aux = best_pad;
-		phase2ok.h_vals[best_pad][0] = 1;
-		mc_write(&phase2ok, -1);
+		trans_packet* phase2ok = malloc(sizeof(trans_packet));
+		phase2ok->seq_num = local_seq;
+		phase2ok->round_num = 2;
+		phase2ok->aux = best_pad;
+		phase2ok->h_vals[best_pad][0] = 1;
+		mc_write(phase2ok, -1);
+        free(phase2ok);
 	} 
 	return 0;
 }
-void print() {
-    for (;received_char[stop_not_printed] == 1; stop_not_printed++){}
+/* 0 if message not finished, 1 if the whole message has been printed */
+char print() {
+    char done = 0;
+    for (;received_char[stop_not_printed] == 1; stop_not_printed++){
+        if (received_message[stop_not_printed] == END_TRANSMISSION){
+            debug("found EOT\n");
+            done = 1;
+            //stop_not_printed--;
+            break;
+        }
+    
+    }
+
     if (start_not_printed != stop_not_printed) {
         write(1, (received_message + start_not_printed), stop_not_printed - start_not_printed);
         start_not_printed = stop_not_printed;
     }
+    return done;
 }
 
 
 
-
+/* returns 1 when transmission is done */
 int receiver_phase3(trans_packet phase3pack) {
 
 	uint8_t ciphertext = phase3pack.aux;
@@ -359,7 +378,7 @@ int receiver_phase3(trans_packet phase3pack) {
 	int counter;
 	pthread_mutex_lock(&share_lock);
 	if (history[local_seq_mod].best_pad_failed) {
-        debug("phase3: best pad failed\n");
+        //debug("phase3: best pad failed\n");
 		/* convert all of our good packets to trans_content */
 		counter = 0;
 		for (int i=0; i<N; i++) {
@@ -370,7 +389,7 @@ int receiver_phase3(trans_packet phase3pack) {
 			}
 		}
 	} else {
-        debug("phase3: best pad didn't fail\n");
+        //debug("phase3: best pad didn't fail\n");
 		/* convert our N packets to trans_contents */
 		for (int i=0; i<N; i++) {
 			pack2cont((history[local_seq_mod].packets)+i, conts+i);
@@ -385,13 +404,15 @@ int receiver_phase3(trans_packet phase3pack) {
 	/* At this point we have a padded message and a pad. Just recreate 
 	 * the message */
 	char plaintext = ciphertext ^ onetimepad;
-    debug("phase3: ciphertext=0x%hhx, onetimepad=0x%hhx\n",ciphertext,onetimepad);
-    debug("WE GOT THE MESSAGE %c, sequence=%d\n", plaintext,phase3pack.seq_num);
+    //debug("phase3: ciphertext=0x%hhx, onetimepad=0x%hhx\n",ciphertext,onetimepad);
+    //debug("WE GOT THE MESSAGE %c, sequence=%d\n", plaintext,phase3pack.seq_num);
     assert(phase3pack.seq_num < MAX_MESSAGE);
     received_message[phase3pack.seq_num] = plaintext;
     received_char[phase3pack.seq_num] =  1;
-    print();
-	return 0;
+    debug("plaintext=%d\n",plaintext);
+    if (plaintext ==4)
+        debug("got EOT\n");
+	return print();
 }
 
 
@@ -419,7 +440,7 @@ uint8_t retrieve_pad(trans_contents* info, int info_n, int pad_num) {
 		uint8_t onetimepad = ((ff256_t*)f->coeffs[0])->val;
 
 		free(f);
-        debug("retrieve_pad: pad_num=%d, onetimepad=0x%hhx\n",pad_num, onetimepad);
+        //debug("retrieve_pad: pad_num=%d, onetimepad=0x%hhx\n",pad_num, onetimepad);
 
 		return onetimepad;
 }
@@ -438,7 +459,8 @@ void *receive_spin(void *params) {
 		if (packet.round_num == 1) {
 			receiver_phase1(wire, packet);
 		} else if (packet.round_num == 3) {
-			receiver_phase3(packet);
+			if (receiver_phase3(packet))
+                return 0;
 		} else {
 			printf("receive_spin error: received packet with invalid "
 		       	   "round number %d\n", packet.round_num);
@@ -488,7 +510,7 @@ int find_pad_conflicts(int pad, trans_contents conts[]) {
 			y = (ff256_t*) eval_poly(conts[j].h[pad], (element_t*) &x);
 			if (conts[i].c[pad][j]->val != y->val) {
 				toReturn |= 1<<((i*N)+j);
-                debug("found pad conflict on pad #%d, conts[%d].c[%d][%d]->val=%hhu != (conts[%d].h[%d] evaluated at %d)->val=%hhu\n", pad, i, pad, j,conts[i].c[pad][j]->val, j, pad,i+1, y->val);
+                //debug("found pad conflict on pad #%d, conts[%d].c[%d][%d]->val=%hhu != (conts[%d].h[%d] evaluated at %d)->val=%hhu\n", pad, i, pad, j,conts[i].c[pad][j]->val, j, pad,i+1, y->val);
 			}
 		}
 	}

@@ -1,0 +1,3 @@
+./receive | pv -W -s `wc -c text | cut -d' ' -f1` -S > /dev/null
+receive | pv -W -s `wc -c text | cut -d' ' -f1` -S -tarpbe > /dev/null
+

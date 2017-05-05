@@ -1,4 +1,5 @@
-CFLAGS= -pthread -ggdb -Wall -Wextra -std=gnu11 -Wno-unused-variable -Wno-unused-parameter
+#CFLAGS= -pg -pthread -ggdb -Wall -Wextra -std=gnu11 -Wno-unused-variable -Wno-unused-parameter
+CFLAGS= -pthread -Wall -Wextra -std=gnu11 -Wno-unused-variable -Wno-unused-parameter -O3
 
 .PHONY: all fieldpoly clean mc
 
