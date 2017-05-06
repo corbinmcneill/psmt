@@ -17,10 +17,11 @@
 int main(int argc, char **argv) {
 	int i;
 	int rfds[N], wfds[N];
-    char cmdline[500]  = "scripts/sen_repipe cslab24 ";
-    strcat(cmdline,argv[1]);
+    char cmdline[5000]  = "scripts/sen_repipe cslab24 ";
     assert(argc == 2);
+    strcat(cmdline,argv[1]);
     printf("cmdline=%s\n",cmdline);
+    printf("sizeof(trans_packet)=%d\n",sizeof(trans_packet));
     if (system(cmdline) < 0) {
              printf("repipe error");
              exit(-1);

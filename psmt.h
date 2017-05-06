@@ -19,7 +19,7 @@ typedef struct
  * round that transmits h poly's and checking pieces */
 typedef struct 
 {
-	unsigned long seq_num;
+	unsigned short seq_num;
 	uint8_t round_num;
 	/* this aux uint8_t is used differently at different phases
 	 * Phase 1: 1 if dummy packet (see documentation in mcio). 0 
