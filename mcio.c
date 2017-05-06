@@ -202,7 +202,7 @@ void* listener(void *threadid) {
                     
            }
            else if ((bytesread != 0) && (bytesread != -1 && errno != EAGAIN)){
-               //debug("Read error, read %d bytes\n",bytesread);
+               debug("Read error, read %d bytes\n",bytesread);
            }
 
        }

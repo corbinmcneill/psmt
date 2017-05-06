@@ -3,10 +3,21 @@ rm -f /tmp/pipes/*
 mkdir -p /tmp/pipes
 for i in {0..4}
 do
-    socat -u UDP-RECV:$((25565+i)) PIPE:"/tmp/pipes/pipe_a_$i" & 
+    mkfifo "/tmp/pipes/pipe_b_$i"
+    socat -u UDP-RECV:$((25565+i)) PIPE:"/tmp/pipes/pipe_a2_$i" & 
     pipes="$pipes $!"
-	socat -u PIPE:"/tmp/pipes/pipe_b_$i" UDP-SENDTO:$1:$((25565+i)) &
+    mkfifo "/tmp/pipes/pipe_a_$i"
+	socat -u PIPE:"/tmp/pipes/pipe_b2_$i" UDP-SENDTO:$1:$((25565+i)) &
     pipes="$pipes $!"
 done
+L=$2
+LIMIT=$(expr 980 \* $L) 
+echo $LIMIT
+for i in {0..4}
+do
+    pv -qL $LIMIT   < "/tmp/pipes/pipe_a2_$i" > "/tmp/pipes/pipe_a_$i" &
+    pv -qL $LIMIT  < "/tmp/pipes/pipe_b_$i"  > "/tmp/pipes/pipe_b2_$i" &
+done
+
 sleep 1
 #~/git/psmt/scripts/killpipes.sh "\"$pipes\"" &

@@ -192,7 +192,7 @@ void *send_spin(void *params) {
 			continue;
 		}
 		if (wire != -1) {
-			printf("send_spin error: expected public read %d\n", wire);
+			printf("send_spin error: expected public read, instead got packet from wire %d, packet: {seq=%d, round=%d}\n", wire,phase2pack.seq_num,phase2pack.round_num);
 			exit(1);
 		}
 
@@ -263,7 +263,7 @@ void *send_spin(void *params) {
 int receiver_phase1(int wire, trans_packet phase1pack) {
 	/* check the wire number */
 	if (wire < 0 || wire >= N ) {
-		printf("receiver_phase1 error: invalid wire number\n");
+		printf("receiver_phase1 error: invalid wire number %d, packet: {seq_num=%d, round_num=%d} \n", wire, phase1pack.seq_num, phase1pack.round_num);
 		exit(1);
 	} 
     //debug("phase1: starting receiver phase 1, sequence %d, wire %d\n", phase1pack.seq_num, wire);

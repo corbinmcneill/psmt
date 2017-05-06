@@ -7,15 +7,21 @@
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <string.h>
+#include <assert.h>
 
 #include "psmt.h"
 #include "mcio.h"
 #include "debug.h"
 
-int main() {
+int main(int argc, char **argv) {
 	int i;
 	int rfds[N], wfds[N];
-    if (system("scripts/sen_repipe cslab24") < 0) {
+    char cmdline[500]  = "scripts/sen_repipe cslab24 ";
+    strcat(cmdline,argv[1]);
+    assert(argc == 2);
+    printf("cmdline=%s\n",cmdline);
+    if (system(cmdline) < 0) {
              printf("repipe error");
              exit(-1);
     }
